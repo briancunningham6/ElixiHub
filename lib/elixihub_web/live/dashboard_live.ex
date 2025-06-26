@@ -10,12 +10,12 @@ defmodule ElixihubWeb.DashboardLive do
   @impl true
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
-    
+
     # Check if user has admin access
     unless Authorization.user_has_permission?(user, "admin:access") do
       {:ok, redirect(socket, to: ~p"/")}
     else
-      {:ok, 
+      {:ok,
        socket
        |> assign(:page_title, "Admin Dashboard")
        |> assign(:users_count, Accounts.list_users() |> length())
@@ -38,12 +38,6 @@ defmodule ElixihubWeb.DashboardLive do
               <p class="mt-1 text-sm text-gray-500">Manage users, roles, permissions, and applications</p>
             </div>
             <div class="flex space-x-4">
-              <.link navigate={~p"/users/settings"} class="text-blue-600 hover:text-blue-800">
-                Settings
-              </.link>
-              <.link href={~p"/users/log_out"} method="delete" class="text-red-600 hover:text-red-800">
-                Sign out
-              </.link>
             </div>
           </div>
         </div>
