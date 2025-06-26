@@ -18,7 +18,7 @@ defmodule Elixihub.Apps do
 
   """
   def list_apps do
-    Repo.all(App)
+    Repo.all(App) |> Repo.preload(:node)
   end
 
   @doc """

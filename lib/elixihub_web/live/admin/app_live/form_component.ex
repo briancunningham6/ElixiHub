@@ -2,6 +2,7 @@ defmodule ElixihubWeb.Admin.AppLive.FormComponent do
   use ElixihubWeb, :live_component
 
   alias Elixihub.Apps
+  alias Elixihub.Nodes
 
   @impl true
   def render(assigns) do
@@ -28,6 +29,13 @@ defmodule ElixihubWeb.Admin.AppLive.FormComponent do
           label="Status" 
           options={[{"Active", "active"}, {"Inactive", "inactive"}, {"Pending", "pending"}]}
         />
+        <.input 
+          field={@form[:node_id]} 
+          type="select" 
+          label="Deployment Node" 
+          prompt="Select a node (optional)"
+          options={@node_options}
+        />
         
         <%= if @action == :edit do %>
           <div class="mt-4 p-4 bg-gray-50 rounded-lg">
@@ -52,10 +60,12 @@ defmodule ElixihubWeb.Admin.AppLive.FormComponent do
   @impl true
   def update(%{app: app} = assigns, socket) do
     changeset = Apps.change_app(app)
+    node_options = get_node_options()
 
     {:ok,
      socket
      |> assign(assigns)
+     |> assign(:node_options, node_options)
      |> assign_form(changeset)}
   end
 
@@ -108,4 +118,13 @@ defmodule ElixihubWeb.Admin.AppLive.FormComponent do
   end
 
   defp notify_parent(msg), do: send(self(), {__MODULE__, msg})
+  
+  defp get_node_options do
+    Nodes.list_nodes()
+    |> Enum.map(fn node ->
+      label = "#{node.name}@#{node.host}"
+      label = if node.is_current, do: "#{label} (Current)", else: label
+      {label, node.id}
+    end)
+  end
 end

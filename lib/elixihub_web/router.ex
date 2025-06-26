@@ -112,6 +112,12 @@ defmodule ElixihubWeb.Router do
     live "/admin/permissions/new", Admin.PermissionLive.Index, :new
     live "/admin/permissions/:id/edit", Admin.PermissionLive.Index, :edit
     
+    # Admin Node Management
+    live "/admin/nodes", Admin.NodeLive.Index, :index
+    live "/admin/nodes/new", Admin.NodeLive.Index, :new
+    live "/admin/nodes/:id/edit", Admin.NodeLive.Index, :edit
+    live "/admin/nodes/:node_id/shell", Admin.ShellLive.Index, :show
+    
     # Admin App Management
     live "/admin/apps", Admin.AppLive.Index, :index
     live "/admin/apps/new", Admin.AppLive.Index, :new

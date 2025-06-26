@@ -10,6 +10,8 @@ defmodule Elixihub.Apps.App do
     field :description, :string
     field :url, :string
     field :api_key, :string
+    
+    belongs_to :node, Elixihub.Nodes.Node
 
     timestamps(type: :utc_datetime)
   end
@@ -17,7 +19,7 @@ defmodule Elixihub.Apps.App do
   @doc false
   def changeset(app, attrs) do
     app
-    |> cast(attrs, [:name, :description, :url, :status])
+    |> cast(attrs, [:name, :description, :url, :status, :node_id])
     |> validate_required([:name, :description, :url])
     |> validate_inclusion(:status, @valid_statuses)
     |> validate_format(:url, ~r/^https?:\/\//)
@@ -29,7 +31,7 @@ defmodule Elixihub.Apps.App do
   @doc false
   def update_changeset(app, attrs) do
     app
-    |> cast(attrs, [:name, :description, :url, :status])
+    |> cast(attrs, [:name, :description, :url, :status, :node_id])
     |> validate_required([:name, :description, :url])
     |> validate_inclusion(:status, @valid_statuses)
     |> validate_format(:url, ~r/^https?:\/\//)

@@ -144,6 +144,16 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
                     API Key: <code class="bg-gray-100 px-2 py-1 rounded text-xs"><%= app.api_key %></code>
                   </div>
                   <div class="text-xs text-gray-400 mt-1">
+                    Node: <%= if app.node do %>
+                      <span class="text-gray-600"><%= app.node.name %>@<%= app.node.host %></span>
+                      <%= if app.node.is_current do %>
+                        <span class="text-blue-600">(Current)</span>
+                      <% end %>
+                    <% else %>
+                      <span class="text-gray-500">Not assigned</span>
+                    <% end %>
+                  </div>
+                  <div class="text-xs text-gray-400 mt-1">
                     Registered: <%= Calendar.strftime(app.inserted_at, "%B %d, %Y at %I:%M %p") %>
                   </div>
                 </div>

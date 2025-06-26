@@ -14,8 +14,8 @@ defmodule Elixihub.Application do
       {Phoenix.PubSub, name: Elixihub.PubSub},
       # Start the Finch HTTP client for sending emails
       {Finch, name: Elixihub.Finch},
-      # Start a worker by calling: Elixihub.Worker.start_link(arg)
-      # {Elixihub.Worker, arg},
+      # Start the nodes startup worker to ensure current node is registered
+      Elixihub.Nodes.StartupWorker,
       # Start to serve requests, typically the last entry
       ElixihubWeb.Endpoint
     ]
