@@ -28,6 +28,7 @@ defmodule Elixihub.Deployment do
          {:ok, _} <- validate_ssh_config(full_ssh_config),
          {:ok, _} <- update_deployment_status(app, "deploying"),
          {:ok, conn} <- SSHClient.connect(ssh_config),
+         {:ok, _} <- stop_existing_service_if_running(conn, app),
          {:ok, _} <- TarHandler.upload_and_extract(conn, tar_path, deploy_path),
          {:ok, roles} <- RoleParser.extract_roles(conn, deploy_path),
          {:ok, _} <- sync_app_roles(app, roles),
@@ -68,6 +69,7 @@ defmodule Elixihub.Deployment do
          {:ok, _} <- validate_ssh_config(ssh_config),
          {:ok, _} <- update_deployment_status(app, "deploying"),
          {:ok, conn} <- SSHClient.connect(ssh_config),
+         {:ok, _} <- stop_existing_service_if_running(conn, app),
          {:ok, _} <- TarHandler.upload_and_extract(conn, tar_path, ssh_config.deploy_path),
          {:ok, roles} <- RoleParser.extract_roles(conn, ssh_config.deploy_path),
          {:ok, _} <- sync_app_roles(app, roles),
@@ -279,7 +281,12 @@ defmodule Elixihub.Deployment do
         tools = Map.get(mcp_config, :tools, [])
         case Elixihub.MCP.register_mcp_server_for_app(app, mcp_config, tools) do
           {:ok, server} ->
-            add_deployment_log(app, "Registered MCP server: #{server.name} with #{length(server.tools)} tools")
+            server_name = Map.get(server, :name, "unknown")
+            tools_count = case Map.get(server, :tools, []) do
+              tools when is_list(tools) -> length(tools)
+              _ -> 0
+            end
+            add_deployment_log(app, "Registered MCP server: #{server_name} with #{tools_count} tools")
             {:ok, :mcp_registered}
           {:error, reason} ->
             add_deployment_log(app, "Failed to register MCP server: #{inspect(reason)}")
@@ -299,6 +306,72 @@ defmodule Elixihub.Deployment do
       {:error, reason} ->
         add_deployment_log(app, "Failed to unregister MCP server: #{inspect(reason)}")
         {:ok, :mcp_unregistration_failed}  # Don't fail undeployment for this
+    end
+  end
+
+  defp stop_existing_service_if_running(connection, app) do
+    add_deployment_log(app, "Checking for existing running service...")
+    
+    case AppInstaller.get_app_service_status(connection, app) do
+      {:ok, "active"} ->
+        add_deployment_log(app, "Found active service. Stopping existing service before deployment...")
+        case AppInstaller.stop_app_service(connection, app) do
+          {:ok, :stopped} ->
+            add_deployment_log(app, "Successfully stopped existing service")
+            # Wait a moment for the service to fully stop
+            :timer.sleep(3000)
+            {:ok, :service_stopped}
+          
+          {:error, reason} ->
+            add_deployment_log(app, "Failed to stop existing service: #{inspect(reason)}")
+            {:error, "Failed to stop existing service: #{inspect(reason)}"}
+        end
+      
+      {:ok, "activating"} ->
+        add_deployment_log(app, "Found service in activating state. Stopping...")
+        case AppInstaller.stop_app_service(connection, app) do
+          {:ok, :stopped} ->
+            add_deployment_log(app, "Successfully stopped activating service")
+            :timer.sleep(3000)
+            {:ok, :service_stopped}
+          
+          {:error, reason} ->
+            add_deployment_log(app, "Failed to stop activating service: #{inspect(reason)}")
+            {:error, "Failed to stop activating service: #{inspect(reason)}"}
+        end
+      
+      {:ok, "failed"} ->
+        add_deployment_log(app, "Found failed service. Attempting to stop...")
+        case AppInstaller.stop_app_service(connection, app) do
+          {:ok, :stopped} ->
+            add_deployment_log(app, "Successfully stopped failed service")
+            {:ok, :service_stopped}
+          
+          {:error, reason} ->
+            add_deployment_log(app, "Warning: Could not stop failed service: #{inspect(reason)}")
+            {:ok, :service_was_failed}  # Don't fail deployment for this
+        end
+      
+      {:ok, "inactive"} ->
+        add_deployment_log(app, "Service is inactive, no need to stop")
+        {:ok, :service_already_stopped}
+      
+      {:ok, status} ->
+        add_deployment_log(app, "Service status: #{status}. Attempting to stop as precaution...")
+        case AppInstaller.stop_app_service(connection, app) do
+          {:ok, :stopped} ->
+            add_deployment_log(app, "Successfully stopped service (was #{status})")
+            {:ok, :service_stopped}
+          
+          {:error, reason} ->
+            add_deployment_log(app, "Warning: Could not stop service in #{status} state: #{inspect(reason)}")
+            {:ok, :service_stop_warning}  # Don't fail deployment for this
+        end
+      
+      {:error, reason} ->
+        # Service probably doesn't exist yet - this is fine for new deployments
+        add_deployment_log(app, "Could not check service status (likely first deployment): #{inspect(reason)}")
+        {:ok, :no_existing_service}
     end
   end
 end

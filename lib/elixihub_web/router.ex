@@ -33,6 +33,14 @@ defmodule ElixihubWeb.Router do
     get "/", PageController, :home
   end
 
+  # SSO routes for seamless authentication with deployed apps
+  scope "/sso", ElixihubWeb do
+    pipe_through :browser
+
+    get "/auth", SSOController, :authenticate
+    get "/logout", SSOController, :logout
+  end
+
   # API routes
   scope "/api", ElixihubWeb.Api do
     pipe_through :api

@@ -279,7 +279,7 @@ defmodule AgentApp.MCPManager do
   defp discover_mcp_servers do
     # Get ElixiHub configuration
     elixihub_config = Application.get_env(:agent_app, :elixihub)
-    base_url = (elixihub_config && elixihub_config[:elixihub_url]) || "http://localhost:4000"
+    base_url = (elixihub_config && elixihub_config[:elixihub_url]) || "http://localhost:4005"
     
     # Get authentication token
     auth_config = Application.get_env(:agent_app, :auth)

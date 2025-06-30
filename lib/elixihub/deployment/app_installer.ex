@@ -63,7 +63,7 @@ defmodule Elixihub.Deployment.AppInstaller do
   def stop_app_service(connection, %App{} = app) do
     service_name = get_service_name(app)
     
-    case SSHClient.execute_command(connection, "systemctl stop #{service_name}") do
+    case SSHClient.execute_command(connection, "sudo systemctl stop #{service_name}") do
       {:ok, {_, _, 0}} ->
         {:ok, :stopped}
       
@@ -81,7 +81,7 @@ defmodule Elixihub.Deployment.AppInstaller do
   def get_app_service_status(connection, %App{} = app) do
     service_name = get_service_name(app)
     
-    case SSHClient.execute_command(connection, "systemctl is-active #{service_name}") do
+    case SSHClient.execute_command(connection, "sudo systemctl is-active #{service_name}") do
       {:ok, {status, _, 0}} ->
         {:ok, String.trim(status)}
       
@@ -148,7 +148,7 @@ defmodule Elixihub.Deployment.AppInstaller do
   def restart_app_service(connection, %App{} = app) do
     service_name = get_service_name(app)
     
-    case SSHClient.execute_command(connection, "systemctl restart #{service_name}") do
+    case SSHClient.execute_command(connection, "sudo systemctl restart #{service_name}") do
       {:ok, {_, _, 0}} ->
         {:ok, :restarted}
       
@@ -243,26 +243,65 @@ defmodule Elixihub.Deployment.AppInstaller do
   end
   
   defp try_elixir_installation_on_target(connection, extract_path) do
-    # Build release on target architecture to avoid exec format errors
-    combined_command = """
+    # Build release on target architecture with better error handling
+    IO.puts("Starting Elixir build on target architecture at: #{extract_path}")
+    
+    # Step 1: Environment check and setup
+    setup_command = """
     cd #{extract_path} && \
     echo 'Building release on target architecture...' && \
+    echo 'Available memory:' && \
+    free -h && \
+    echo 'Disk space:' && \
+    df -h . && \
     git config --global http.lowSpeedLimit 1000 && \
     git config --global http.lowSpeedTime 300 && \
     git config --global http.postBuffer 524288000 && \
     export HEX_HTTP_TIMEOUT=300 && \
     export HEX_HTTP_CONCURRENCY=1 && \
+    export ERL_MAX_PORTS=4096 && \
+    export ELIXIR_ERL_OPTIONS="+K true +A 4" && \
     mix local.hex --force && \
     mix local.rebar --force && \
-    timeout 600 mix deps.get --only prod && \
-    MIX_ENV=prod mix compile && \
-    (MIX_ENV=prod mix assets.deploy 2>/dev/null || echo 'No assets to deploy') && \
-    MIX_ENV=prod mix release --overwrite && \
+    echo 'Setup completed successfully'
+    """
+    
+    case SSHClient.execute_elixir_build_command(connection, setup_command) do
+      {:ok, {_stdout, _stderr, 0}} ->
+        IO.puts("Environment setup completed successfully")
+        # Continue with main build
+        try_elixir_build_steps(connection, extract_path)
+      
+      {:ok, {stdout, stderr, exit_code}} ->
+        {:error, "Environment setup failed (exit #{exit_code}): #{stderr}"}
+      
+      {:error, reason} ->
+        {:error, "Environment setup failed: #{inspect(reason)}"}
+    end
+  end
+  
+  defp try_elixir_build_steps(connection, extract_path) do
+    # Main build steps with increased timeout for compilation
+    build_command = """
+    cd #{extract_path} && \
+    export HEX_HTTP_TIMEOUT=300 && \
+    export HEX_HTTP_CONCURRENCY=1 && \
+    export ERL_MAX_PORTS=4096 && \
+    export ELIXIR_ERL_OPTIONS="+K true +A 4" && \
+    echo 'Getting dependencies...' && \
+    timeout 900 mix deps.get --only prod && \
+    echo 'Compiling application...' && \
+    timeout 1200 sh -c 'MIX_ENV=prod mix compile' && \
+    echo 'Building assets...' && \
+    (timeout 300 sh -c 'MIX_ENV=prod mix assets.deploy' 2>/dev/null || echo 'No assets to deploy') && \
+    echo 'Creating release...' && \
+    timeout 600 sh -c 'MIX_ENV=prod mix release --overwrite' && \
     echo 'Release built successfully on target architecture'
     """
     
-    case SSHClient.execute_deployment_command(connection, combined_command) do
+    case SSHClient.execute_elixir_build_command(connection, build_command) do
       {:ok, {stdout, stderr, 0}} ->
+        IO.puts("Elixir build completed successfully")
         {:ok, [%{
           command: "elixir_build_on_target",
           stdout: stdout,
@@ -272,10 +311,64 @@ defmodule Elixihub.Deployment.AppInstaller do
         }]}
       
       {:ok, {stdout, stderr, exit_code}} ->
-        {:error, "Commands failed: [%{command: \"elixir_build_on_target\", stdout: \"#{stdout}\", stderr: \"#{stderr}\", success: false, exit_code: #{exit_code}}]"}
+        IO.puts("Elixir build failed with exit code: #{exit_code}")
+        IO.puts("Last 1000 chars of stdout: #{String.slice(stdout, -1000, 1000)}")
+        IO.puts("Last 1000 chars of stderr: #{String.slice(stderr, -1000, 1000)}")
+        
+        # Try low-memory build strategy if regular build failed
+        if String.contains?(stderr, "killed") or String.contains?(stdout, "killed") or 
+           String.contains?(stderr, "memory") or String.contains?(stderr, "out of memory") do
+          IO.puts("Detected potential memory issue, trying low-memory build strategy...")
+          try_elixir_low_memory_build(connection, extract_path)
+        else
+          {:error, "Elixir build failed (exit #{exit_code}). Check logs for details."}
+        end
       
       {:error, reason} ->
-        {:error, "Commands failed: [%{command: \"elixir_build_on_target\", error: #{inspect(reason)}, success: false}]"}
+        IO.puts("Elixir build failed with error: #{inspect(reason)}")
+        {:error, "Elixir build failed: #{inspect(reason)}"}
+    end
+  end
+  
+  defp try_elixir_low_memory_build(connection, extract_path) do
+    IO.puts("Attempting low-memory build strategy...")
+    
+    low_memory_command = """
+    cd #{extract_path} && \
+    export HEX_HTTP_TIMEOUT=300 && \
+    export HEX_HTTP_CONCURRENCY=1 && \
+    export ERL_MAX_PORTS=2048 && \
+    export ELIXIR_ERL_OPTIONS="+K true +A 2" && \
+    export ERL_FLAGS="+MBas aobf +MBlmbcs 512 +MHas aobf +MHlmbcs 512" && \
+    echo 'Low-memory build: Getting dependencies...' && \
+    timeout 900 mix deps.get --only prod && \
+    echo 'Low-memory build: Compiling application with reduced parallelism...' && \
+    timeout 1800 sh -c 'MIX_ENV=prod mix compile --force --no-optional-deps' && \
+    echo 'Low-memory build: Building assets...' && \
+    (timeout 300 sh -c 'MIX_ENV=prod mix assets.deploy' 2>/dev/null || echo 'No assets to deploy') && \
+    echo 'Low-memory build: Creating release...' && \
+    timeout 900 sh -c 'MIX_ENV=prod mix release --overwrite --no-optional-deps' && \
+    echo 'Low-memory release built successfully'
+    """
+    
+    case SSHClient.execute_elixir_build_command(connection, low_memory_command) do
+      {:ok, {stdout, stderr, 0}} ->
+        IO.puts("Low-memory Elixir build completed successfully")
+        {:ok, [%{
+          command: "elixir_low_memory_build",
+          stdout: stdout,
+          stderr: stderr,
+          exit_code: 0,
+          success: true
+        }]}
+      
+      {:ok, {stdout, stderr, exit_code}} ->
+        IO.puts("Low-memory build also failed with exit code: #{exit_code}")
+        {:error, "Both regular and low-memory Elixir build failed (exit #{exit_code})."}
+      
+      {:error, reason} ->
+        IO.puts("Low-memory build failed with error: #{inspect(reason)}")
+        {:error, "Low-memory Elixir build failed: #{inspect(reason)}"}
     end
   end
 
@@ -925,14 +1018,14 @@ defmodule Elixihub.Deployment.AppInstaller do
         ~s"""
         Environment=OPENAI_API_KEY=your_openai_api_key_here
         Environment=ELIXIHUB_JWT_SECRET=your_elixihub_jwt_secret_here
-        Environment=ELIXIHUB_URL=http://localhost:4000
+        Environment=ELIXIHUB_URL=http://localhost:4005
         Environment=HELLO_WORLD_MCP_URL=http://localhost:4001/api/mcp
         """
       
       String.contains?(app_name_lower, "hello") ->
         ~s"""
         Environment=ELIXIHUB_JWT_SECRET=your_elixihub_jwt_secret_here
-        Environment=ELIXIHUB_URL=http://localhost:4000
+        Environment=ELIXIHUB_URL=http://localhost:4005
         """
       
       true ->

@@ -44,6 +44,7 @@ defmodule AgentAppWeb.Router do
     get "/", PageController, :home
     get "/health", PageController, :health
     get "/auth/callback", AuthController, :callback
+    get "/auth/sso_callback", AuthController, :sso_callback
     get "/logout", AuthController, :logout
   end
 

@@ -6,6 +6,7 @@ defmodule Elixihub.Deployment.SSHClient do
   @default_port 22
   @default_timeout 30_000
   @deployment_timeout 600_000  # 10 minutes for deployment operations
+  @elixir_build_timeout 1_800_000  # 30 minutes for Elixir builds
 
   @doc """
   Connects to a remote server via SSH.
@@ -97,6 +98,14 @@ defmodule Elixihub.Deployment.SSHClient do
   def execute_deployment_command(connection, command, opts \\ []) do
     deployment_timeout = Keyword.get(opts, :timeout, @deployment_timeout)
     execute_command(connection, command, [timeout: deployment_timeout])
+  end
+
+  @doc """
+  Executes an Elixir build command with very extended timeout (30 minutes).
+  """
+  def execute_elixir_build_command(connection, command, opts \\ []) do
+    build_timeout = Keyword.get(opts, :timeout, @elixir_build_timeout)
+    execute_command(connection, command, [timeout: build_timeout])
   end
 
   @doc """

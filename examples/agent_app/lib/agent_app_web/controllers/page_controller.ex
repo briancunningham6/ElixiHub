@@ -12,12 +12,12 @@ defmodule AgentAppWeb.PageController do
       # User is authenticated, redirect to chat
       redirect(conn, to: "/chat")
     else
-      # User is not authenticated, show login page
+      # User is not authenticated, show SSO login page
       elixihub_config = Application.get_env(:agent_app, :elixihub)
-      elixihub_url = elixihub_config[:elixihub_url] || "http://localhost:4000"
+      elixihub_url = elixihub_config[:elixihub_url] || "http://localhost:4005"
       agent_url = AgentAppWeb.Endpoint.url()
-      callback_url = "#{agent_url}/auth/callback"
-      login_url = "#{elixihub_url}/users/log_in?callback_url=#{URI.encode(callback_url)}"
+      return_url = "#{agent_url}/auth/sso_callback"
+      sso_url = "#{elixihub_url}/sso/auth?return_to=#{URI.encode(return_url)}"
       
       html(conn, """
       <!DOCTYPE html>
@@ -40,27 +40,38 @@ defmodule AgentAppWeb.PageController do
           <h1 class="title">Welcome to ElixiHub Agent</h1>
           <p class="description">
             The ElixiHub Agent is an AI-powered chat interface that can interact with applications deployed on your ElixiHub platform.
-            To get started, please log in with your ElixiHub account.
+            Click below to sign in with your ElixiHub account - you'll be seamlessly authenticated!
           </p>
           <div style="margin-bottom: 1rem;">
-            <a href="#{elixihub_url}/users/log_in" target="_blank" class="login-btn">Open ElixiHub Login</a>
+            <a href="#{sso_url}" class="login-btn">Sign in with ElixiHub</a>
           </div>
           
           <div style="border-top: 1px solid #e5e7eb; padding-top: 1rem; margin-top: 1rem;">
             <p style="color: #6b7280; margin-bottom: 1rem; font-size: 0.875rem;">
-              After logging in to ElixiHub, get your JWT token by visiting: 
-              <a href="#{elixihub_url}/api/auth/token" target="_blank" style="color: #3b82f6; text-decoration: underline;">
-                #{elixihub_url}/api/auth/token
-              </a>
-              <br>Then paste it below to authenticate with the Agent app:
+              <strong>Seamless Single Sign-On:</strong><br>
+              • If you're already logged in to ElixiHub, you'll be authenticated instantly<br>
+              • If not, you'll be redirected to ElixiHub login and then back here automatically<br>
+              • No need to copy and paste tokens!
             </p>
-            <form action="/auth/callback" method="get" style="display: flex; gap: 0.5rem;">
-              <input type="text" name="token" placeholder="Paste your JWT token here..." 
-                     style="flex: 1; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;" required>
-              <button type="submit" style="background: #10b981; color: white; padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer;">
-                Authenticate
-              </button>
-            </form>
+            
+            <details style="margin-top: 1rem;">
+              <summary style="cursor: pointer; color: #6b7280; font-size: 0.875rem;">Advanced: Manual Token Entry</summary>
+              <div style="margin-top: 1rem; padding: 1rem; background: #f9fafb; border-radius: 4px;">
+                <p style="color: #6b7280; margin-bottom: 1rem; font-size: 0.875rem;">
+                  For testing or advanced use, you can manually enter a JWT token from: 
+                  <a href="#{elixihub_url}/api/auth/token" target="_blank" style="color: #3b82f6; text-decoration: underline;">
+                    #{elixihub_url}/api/auth/token
+                  </a>
+                </p>
+                <form action="/auth/callback" method="get" style="display: flex; gap: 0.5rem;">
+                  <input type="text" name="token" placeholder="Paste your JWT token here..." 
+                         style="flex: 1; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;" required>
+                  <button type="submit" style="background: #10b981; color: white; padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer;">
+                    Authenticate
+                  </button>
+                </form>
+              </div>
+            </details>
           </div>
         </div>
       </body>

@@ -34,7 +34,7 @@ config :agent_app, :openai,
 # ElixiHub configuration for authentication and discovery
 config :agent_app, :elixihub,
   jwt_secret: System.get_env("ELIXIHUB_JWT_SECRET", "elixihub_jwt_secret_dev"),
-  elixihub_url: System.get_env("ELIXIHUB_URL", "http://localhost:4000")
+  elixihub_url: System.get_env("ELIXIHUB_URL", "http://localhost:4005")
 
 # MCP configuration
 config :agent_app, :mcp,

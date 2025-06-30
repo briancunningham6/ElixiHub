@@ -126,7 +126,7 @@ defmodule Elixihub.MCP do
 
           if Enum.empty?(failed_tools) do
             server_with_tools = Repo.preload(server, :tools)
-            {:ok, server_with_tools}
+            server_with_tools
           else
             Repo.rollback({:error, :tool_creation_failed, failed_tools})
           end

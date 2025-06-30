@@ -4,6 +4,7 @@ defmodule AgentApp.Auth do
   """
 
   use Joken.Config
+  import Plug.Conn
 
   @impl Joken.Config
   def token_config do
@@ -40,8 +41,21 @@ defmodule AgentApp.Auth do
     conn.assigns[:current_user]
   end
 
+  @doc """
+  Plug init callback - returns the function name to call.
+  """
+  def init(function_name) when is_atom(function_name) do
+    function_name
+  end
+
+  @doc """
+  Plug call callback - dispatches to the appropriate auth function.
+  """
+  def call(conn, function_name) do
+    apply(__MODULE__, function_name, [conn, []])
+  end
+
   def require_authentication(conn, _opts) do
-    import Plug.Conn
 
     case get_req_header(conn, "authorization") do
       ["Bearer " <> token] ->
@@ -65,7 +79,6 @@ defmodule AgentApp.Auth do
   end
 
   def authenticate_browser(conn, _opts) do
-    import Plug.Conn
 
     # Try to get token from Authorization header first
     token = case get_req_header(conn, "authorization") do
@@ -73,22 +86,26 @@ defmodule AgentApp.Auth do
       _ -> 
         # Fallback to session or cookie
         case get_session(conn, :auth_token) do
-          nil -> get_req_cookie(conn, "auth_token")
+          nil -> 
+            case conn.req_cookies do
+              %{"auth_token" => token} -> token
+              _ -> nil
+            end
           token -> token
         end
     end
 
     case token do
       nil ->
-        # No token found - redirect to ElixiHub login with callback
+        # No token found - redirect to ElixiHub SSO
         elixihub_config = Application.get_env(:agent_app, :elixihub)
-        elixihub_url = elixihub_config[:elixihub_url] || "http://localhost:4000"
+        elixihub_url = elixihub_config[:elixihub_url] || "http://localhost:4005"
         agent_url = AgentAppWeb.Endpoint.url()
-        callback_url = "#{agent_url}/auth/callback"
-        login_url = "#{elixihub_url}/users/log_in?callback_url=#{URI.encode(callback_url)}"
+        return_url = "#{agent_url}/auth/sso_callback"
+        sso_url = "#{elixihub_url}/sso/auth?return_to=#{URI.encode(return_url)}"
         
         conn
-        |> Phoenix.Controller.redirect(external: login_url)
+        |> Phoenix.Controller.redirect(external: sso_url)
         |> halt()
       
       token ->
@@ -97,29 +114,32 @@ defmodule AgentApp.Auth do
             assign(conn, :current_user, user)
           
           {:error, _reason} ->
-            # Invalid token - redirect to login
+            # Invalid token - redirect to SSO
             elixihub_config = Application.get_env(:agent_app, :elixihub)
-            elixihub_url = elixihub_config[:elixihub_url] || "http://localhost:4000"
+            elixihub_url = elixihub_config[:elixihub_url] || "http://localhost:4005"
             agent_url = AgentAppWeb.Endpoint.url()
-            callback_url = "#{agent_url}/auth/callback"
-            login_url = "#{elixihub_url}/users/log_in?callback_url=#{URI.encode(callback_url)}"
+            return_url = "#{agent_url}/auth/sso_callback"
+            sso_url = "#{elixihub_url}/sso/auth?return_to=#{URI.encode(return_url)}"
             
             conn
-            |> Phoenix.Controller.redirect(external: login_url)
+            |> Phoenix.Controller.redirect(external: sso_url)
             |> halt()
         end
     end
   end
 
   def maybe_authenticate_browser(conn, _opts) do
-    import Plug.Conn
 
     # Try to get token from various sources
     token = case get_req_header(conn, "authorization") do
       ["Bearer " <> token] -> token
       _ -> 
         case get_session(conn, :auth_token) do
-          nil -> get_req_cookie(conn, "auth_token")
+          nil -> 
+            case conn.req_cookies do
+              %{"auth_token" => token} -> token
+              _ -> nil
+            end
           token -> token
         end
     end

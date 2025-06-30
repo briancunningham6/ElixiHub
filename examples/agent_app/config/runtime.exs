@@ -38,7 +38,7 @@ if config_env() == :prod do
 
   # ElixiHub JWT configuration with defaults
   elixihub_jwt_secret = System.get_env("ELIXIHUB_JWT_SECRET") || "default_jwt_secret_change_me"
-  elixihub_url = System.get_env("ELIXIHUB_URL") || "http://localhost:4000"
+  elixihub_url = System.get_env("ELIXIHUB_URL") || "http://localhost:4005"
   
   config :agent_app, :elixihub,
     jwt_secret: elixihub_jwt_secret,
