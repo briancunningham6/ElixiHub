@@ -18,6 +18,17 @@ defmodule AgentAppWeb.Router do
     plug :put_root_layout, html: {AgentAppWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug AgentApp.Auth, :maybe_authenticate_browser
+  end
+
+  pipeline :authenticated_browser do
+    plug :accepts, ["html"]
+    plug :fetch_session
+    plug :fetch_live_flash
+    plug :put_root_layout, html: {AgentAppWeb.Layouts, :root}
+    plug :protect_from_forgery
+    plug :put_secure_browser_headers
+    plug AgentApp.Auth, :authenticate_browser
   end
 
   pipeline :api do
@@ -32,6 +43,14 @@ defmodule AgentAppWeb.Router do
 
     get "/", PageController, :home
     get "/health", PageController, :health
+    get "/auth/callback", AuthController, :callback
+    get "/logout", AuthController, :logout
+  end
+
+  # Authenticated browser routes
+  scope "/", AgentAppWeb do
+    pipe_through :authenticated_browser
+
     live "/chat", ChatLive
   end
 

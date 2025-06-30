@@ -100,6 +100,23 @@ defmodule ElixihubWeb.Api.AuthController do
     })
   end
 
+  def token(conn, _params) do
+    user = Guardian.Plug.current_resource(conn)
+    token = Guardian.Plug.current_token(conn)
+    
+    conn
+    |> put_status(:ok)
+    |> json(%{
+      user: %{
+        id: user.id,
+        username: user.username || user.email,
+        email: user.email
+      },
+      token: token,
+      instructions: "Copy the token value above and paste it into the Agent app authentication form."
+    })
+  end
+
   defp transform_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
       Regex.replace(~r"%{(\w+)}", msg, fn _, key ->

@@ -63,4 +63,81 @@ defmodule AgentApp.Auth do
         |> halt()
     end
   end
+
+  def authenticate_browser(conn, _opts) do
+    import Plug.Conn
+
+    # Try to get token from Authorization header first
+    token = case get_req_header(conn, "authorization") do
+      ["Bearer " <> token] -> token
+      _ -> 
+        # Fallback to session or cookie
+        case get_session(conn, :auth_token) do
+          nil -> get_req_cookie(conn, "auth_token")
+          token -> token
+        end
+    end
+
+    case token do
+      nil ->
+        # No token found - redirect to ElixiHub login with callback
+        elixihub_config = Application.get_env(:agent_app, :elixihub)
+        elixihub_url = elixihub_config[:elixihub_url] || "http://localhost:4000"
+        agent_url = AgentAppWeb.Endpoint.url()
+        callback_url = "#{agent_url}/auth/callback"
+        login_url = "#{elixihub_url}/users/log_in?callback_url=#{URI.encode(callback_url)}"
+        
+        conn
+        |> Phoenix.Controller.redirect(external: login_url)
+        |> halt()
+      
+      token ->
+        case verify_token(token) do
+          {:ok, user} ->
+            assign(conn, :current_user, user)
+          
+          {:error, _reason} ->
+            # Invalid token - redirect to login
+            elixihub_config = Application.get_env(:agent_app, :elixihub)
+            elixihub_url = elixihub_config[:elixihub_url] || "http://localhost:4000"
+            agent_url = AgentAppWeb.Endpoint.url()
+            callback_url = "#{agent_url}/auth/callback"
+            login_url = "#{elixihub_url}/users/log_in?callback_url=#{URI.encode(callback_url)}"
+            
+            conn
+            |> Phoenix.Controller.redirect(external: login_url)
+            |> halt()
+        end
+    end
+  end
+
+  def maybe_authenticate_browser(conn, _opts) do
+    import Plug.Conn
+
+    # Try to get token from various sources
+    token = case get_req_header(conn, "authorization") do
+      ["Bearer " <> token] -> token
+      _ -> 
+        case get_session(conn, :auth_token) do
+          nil -> get_req_cookie(conn, "auth_token")
+          token -> token
+        end
+    end
+
+    case token do
+      nil ->
+        # No token - assign nil user (allow anonymous access)
+        assign(conn, :current_user, nil)
+      
+      token ->
+        case verify_token(token) do
+          {:ok, user} ->
+            assign(conn, :current_user, user)
+          
+          {:error, _reason} ->
+            # Invalid token - assign nil user
+            assign(conn, :current_user, nil)
+        end
+    end
+  end
 end

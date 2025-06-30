@@ -40,6 +40,7 @@ defmodule ElixihubWeb.Router do
     post "/login", AuthController, :login
     post "/register", AuthController, :register
     get "/.well-known/jwks.json", JwksController, :index
+    get "/mcp/discovery", MCPController, :discovery
   end
 
   scope "/api", ElixihubWeb.Api do
@@ -47,6 +48,7 @@ defmodule ElixihubWeb.Router do
 
     get "/user", AuthController, :user
     get "/permissions", AuthController, :permissions
+    get "/auth/token", AuthController, :token
     
     resources "/users", UserController, only: [:index, :delete]
     resources "/apps", AppController, except: [:new, :edit]

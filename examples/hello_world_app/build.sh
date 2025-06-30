@@ -44,6 +44,11 @@ if [ -f "roles.json" ]; then
     cp roles.json ${TEMP_DIR}/
 fi
 
+# Copy mcp.json if it exists
+if [ -f "mcp.json" ]; then
+    cp mcp.json ${TEMP_DIR}/
+fi
+
 # Ensure we don't include any build artifacts
 rm -rf ${TEMP_DIR}/_build 2>/dev/null || true
 rm -rf ${TEMP_DIR}/deps 2>/dev/null || true

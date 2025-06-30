@@ -10,6 +10,10 @@ defmodule AgentAppWeb.ChatLive do
     Logger.info("ChatLive mount started")
     
     try do
+      # Get current user from connection assigns
+      current_user = socket.assigns[:current_user] || %{username: "anonymous", user_id: nil}
+      Logger.info("ChatLive mount for user: #{inspect(current_user)}")
+      
       # Initialize the chat interface
       socket =
         socket
@@ -17,28 +21,46 @@ defmodule AgentAppWeb.ChatLive do
         |> assign(:input_message, "")
         |> assign(:loading, false)
         |> assign(:available_tools, [])
-        |> assign(:current_user, %{username: "demo_user", user_id: 1})
+        |> assign(:mcp_servers, [])
+        |> assign(:current_user, current_user)
 
       Logger.info("Basic socket assigns completed")
 
-      # Load available tools with timeout and error handling
+      # Load available tools and MCP servers with timeout and error handling
       final_socket = try do
-        case AgentApp.MCPManager.list_available_tools() do
+        tools_result = case AgentApp.MCPManager.list_available_tools() do
           {:ok, tools} ->
             Logger.info("Successfully loaded #{length(tools)} tools")
-            assign(socket, :available_tools, tools)
-          
+            {:ok, tools}
           {:error, reason} ->
             Logger.warning("Failed to load available tools: #{inspect(reason)}")
+            {:ok, []}
+        end
+
+        servers_result = case AgentApp.MCPManager.list_mcp_servers() do
+          {:ok, servers} ->
+            Logger.info("Successfully loaded #{length(servers)} MCP servers")
+            {:ok, servers}
+          {:error, reason} ->
+            Logger.warning("Failed to load MCP servers: #{inspect(reason)}")
+            {:ok, []}
+        end
+
+        case {tools_result, servers_result} do
+          {{:ok, tools}, {:ok, servers}} ->
+            socket
+            |> assign(:available_tools, tools)
+            |> assign(:mcp_servers, servers)
+          _ ->
             socket
         end
       catch
         :exit, {:timeout, _} ->
-          Logger.warning("Timeout loading available tools - MCPManager may still be starting")
+          Logger.warning("Timeout loading MCP data - MCPManager may still be starting")
           socket
         
         kind, reason ->
-          Logger.warning("Error loading available tools: #{kind} - #{inspect(reason)}")
+          Logger.warning("Error loading MCP data: #{kind} - #{inspect(reason)}")
           socket
       end
 
@@ -50,13 +72,15 @@ defmodule AgentAppWeb.ChatLive do
         Logger.error("Stacktrace: #{inspect(__STACKTRACE__)}")
         
         # Return a minimal working socket
+        current_user = socket.assigns[:current_user] || %{username: "anonymous", user_id: nil}
         minimal_socket = 
           socket
           |> assign(:messages, [])
           |> assign(:input_message, "")
           |> assign(:loading, false)
           |> assign(:available_tools, [])
-          |> assign(:current_user, %{username: "demo_user", user_id: 1})
+          |> assign(:mcp_servers, [])
+          |> assign(:current_user, current_user)
           
         {:ok, minimal_socket}
     end
@@ -303,6 +327,12 @@ defmodule AgentAppWeb.ChatLive do
                 >
                   Clear Chat
                 </button>
+                <a
+                  href="/logout"
+                  class="text-blue-100 hover:text-white text-sm underline"
+                >
+                  Logout
+                </a>
               </div>
             </div>
           </div>
@@ -401,6 +431,48 @@ defmodule AgentAppWeb.ChatLive do
               </details>
             </div>
           <% end %>
+
+          <!-- MCP Servers Info -->
+          <div class="border-t bg-gray-50 px-6 py-3">
+            <details class="text-sm text-gray-600" open>
+              <summary class="cursor-pointer hover:text-gray-800 font-semibold">
+                MCP Servers (<%= length(@mcp_servers) %>)
+              </summary>
+              <%= if Enum.any?(@mcp_servers) do %>
+                <div class="mt-3 space-y-2">
+                  <%= for server <- @mcp_servers do %>
+                    <div class="bg-white rounded border p-3">
+                      <div class="flex items-center justify-between">
+                        <div>
+                          <div class="font-medium text-gray-900"><%= server.name %></div>
+                          <div class="text-xs text-gray-500"><%= server.description %></div>
+                          <div class="text-xs text-gray-400 mt-1">
+                            URL: <%= server.url %> | Version: <%= server.version %>
+                          </div>
+                        </div>
+                        <div class="flex-shrink-0">
+                          <span class={[
+                            "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
+                            if server.status == "connected" do
+                              "bg-green-100 text-green-800"
+                            else
+                              "bg-red-100 text-red-800"
+                            end
+                          ]}>
+                            <%= server.status %>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  <% end %>
+                </div>
+              <% else %>
+                <div class="mt-2 text-gray-500 italic">
+                  No MCP servers discovered. Deploy applications with MCP configuration to see them here.
+                </div>
+              <% end %>
+            </details>
+          </div>
         </div>
       </div>
     </div>

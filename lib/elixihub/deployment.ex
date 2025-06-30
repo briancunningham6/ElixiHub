@@ -6,7 +6,7 @@ defmodule Elixihub.Deployment do
   import Ecto.Query, warn: false
   alias Elixihub.Repo
   alias Elixihub.Apps.App
-  alias Elixihub.Deployment.{SSHClient, TarHandler, AppInstaller, RoleParser}
+  alias Elixihub.Deployment.{SSHClient, TarHandler, AppInstaller, RoleParser, MCPParser}
 
   @doc """
   Deploys an application to a remote server via SSH.
@@ -32,6 +32,7 @@ defmodule Elixihub.Deployment do
          {:ok, roles} <- RoleParser.extract_roles(conn, deploy_path),
          {:ok, _} <- sync_app_roles(app, roles),
          {:ok, result} <- AppInstaller.install_app(conn, app, deploy_path),
+         {:ok, _} <- register_mcp_server(app, conn, deploy_path),
          {:ok, _} <- SSHClient.disconnect(conn),
          {:ok, _} <- update_deployment_status(app, "deployed") do
       log_deployment_success(app, result)
@@ -71,6 +72,7 @@ defmodule Elixihub.Deployment do
          {:ok, roles} <- RoleParser.extract_roles(conn, ssh_config.deploy_path),
          {:ok, _} <- sync_app_roles(app, roles),
          {:ok, result} <- AppInstaller.install_app(conn, app, ssh_config.deploy_path),
+         {:ok, _} <- register_mcp_server(app, conn, ssh_config.deploy_path),
          {:ok, _} <- SSHClient.disconnect(conn),
          {:ok, _} <- update_deployment_status(app, "deployed") do
       log_deployment_success(app, result)
@@ -107,6 +109,7 @@ defmodule Elixihub.Deployment do
          {:ok, conn} <- SSHClient.connect(ssh_config),
          {:ok, result} <- AppInstaller.undeploy_app(conn, app, extract_path),
          {:ok, _} <- SSHClient.disconnect(conn),
+         {:ok, _} <- unregister_mcp_server(app),
          {:ok, _} <- update_deployment_status(app, "pending") do
       log_undeployment_success(app, result)
       {:ok, result}
@@ -268,5 +271,34 @@ defmodule Elixihub.Deployment do
 
   defp log_undeployment_error(app, reason) do
     add_deployment_log(app, "Undeployment failed: #{inspect(reason)}")
+  end
+
+  defp register_mcp_server(app, connection, deploy_path) do
+    case MCPParser.extract_mcp_info(connection, deploy_path, app) do
+      {:ok, mcp_config} ->
+        tools = Map.get(mcp_config, :tools, [])
+        case Elixihub.MCP.register_mcp_server_for_app(app, mcp_config, tools) do
+          {:ok, server} ->
+            add_deployment_log(app, "Registered MCP server: #{server.name} with #{length(server.tools)} tools")
+            {:ok, :mcp_registered}
+          {:error, reason} ->
+            add_deployment_log(app, "Failed to register MCP server: #{inspect(reason)}")
+            {:ok, :mcp_registration_failed}  # Don't fail deployment for this
+        end
+      {:error, reason} ->
+        add_deployment_log(app, "No MCP configuration found: #{inspect(reason)}")
+        {:ok, :no_mcp_config}
+    end
+  end
+
+  defp unregister_mcp_server(app) do
+    case Elixihub.MCP.unregister_mcp_server_for_app(app) do
+      {:ok, _} ->
+        add_deployment_log(app, "Unregistered MCP server for app: #{app.name}")
+        {:ok, :mcp_unregistered}
+      {:error, reason} ->
+        add_deployment_log(app, "Failed to unregister MCP server: #{inspect(reason)}")
+        {:ok, :mcp_unregistration_failed}  # Don't fail undeployment for this
+    end
   end
 end

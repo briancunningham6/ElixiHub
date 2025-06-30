@@ -19,7 +19,7 @@ defmodule Elixihub.MixProject do
   def application do
     [
       mod: {Elixihub.Application, []},
-      extra_applications: [:logger, :runtime_tools, :ssh]
+      extra_applications: [:logger, :runtime_tools, :ssh, :httpoison]
     ]
   end
 
@@ -62,7 +62,8 @@ defmodule Elixihub.MixProject do
       {:guardian, "~> 2.3"},
       {:guardian_phoenix, "~> 2.0"},
       {:guardian_db, "~> 2.1"},
-      {:bodyguard, "~> 2.4"}
+      {:bodyguard, "~> 2.4"},
+      {:httpoison, "~> 2.0"}
     ]
   end
 

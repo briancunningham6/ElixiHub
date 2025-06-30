@@ -13,21 +13,44 @@ defmodule AgentApp.MCPManager do
   end
 
   def init(_opts) do
-    mcp_config = Application.get_env(:agent_app, :mcp)
-    servers = (mcp_config && mcp_config[:servers]) || []
-    
-    Logger.info("MCPManager initializing with config: #{inspect(mcp_config)}")
-    Logger.info("Found #{length(servers)} configured servers: #{inspect(servers)}")
+    Logger.info("MCPManager initializing - will discover servers from ElixiHub")
     
     state = %__MODULE__{
-      servers: servers,
+      servers: [],
       connections: %{}
     }
 
-    # Initialize connections to MCP servers
-    send(self(), :connect_servers)
+    # Discover and connect to MCP servers from ElixiHub
+    send(self(), :discover_and_connect_servers)
     
     {:ok, state}
+  end
+
+  def handle_info(:discover_and_connect_servers, state) do
+    Logger.info("Discovering MCP servers from ElixiHub...")
+    
+    case discover_mcp_servers() do
+      {:ok, servers} ->
+        Logger.info("Discovered #{length(servers)} MCP servers from ElixiHub")
+        
+        connections = Enum.reduce(servers, %{}, fn server, acc ->
+          case connect_to_server(server) do
+            {:ok, conn} ->
+              Logger.info("Connected to MCP server: #{server.name}")
+              Map.put(acc, server.name, conn)
+            
+            {:error, reason} ->
+              Logger.warning("Failed to connect to MCP server #{server.name}: #{inspect(reason)}")
+              acc
+          end
+        end)
+
+        {:noreply, %{state | servers: servers, connections: connections}}
+      
+      {:error, reason} ->
+        Logger.warning("Failed to discover MCP servers: #{inspect(reason)}")
+        {:noreply, state}
+    end
   end
 
   def handle_info(:connect_servers, state) do
@@ -87,6 +110,27 @@ defmodule AgentApp.MCPManager do
     {:reply, {:ok, tools}, state}
   end
 
+  def handle_call(:list_mcp_servers, _from, state) do
+    servers_info = Enum.map(state.servers, fn server ->
+      connection_status = if Map.has_key?(state.connections, server.name) do
+        "connected"
+      else
+        "disconnected"
+      end
+      
+      %{
+        name: server.name,
+        url: server.url,
+        description: server.description,
+        version: server.version,
+        status: connection_status,
+        app_id: server.app_id
+      }
+    end)
+    
+    {:reply, {:ok, servers_info}, state}
+  end
+
   # Public API
 
   def call_tool(server_name, tool_name, params, user_context \\ %{}) do
@@ -95,6 +139,10 @@ defmodule AgentApp.MCPManager do
 
   def list_available_tools do
     GenServer.call(__MODULE__, :list_available_tools)
+  end
+
+  def list_mcp_servers do
+    GenServer.call(__MODULE__, :list_mcp_servers)
   end
 
   # Private functions
@@ -226,5 +274,69 @@ defmodule AgentApp.MCPManager do
 
   defp generate_request_id do
     :crypto.strong_rand_bytes(16) |> Base.hex_encode32(case: :lower)
+  end
+
+  defp discover_mcp_servers do
+    # Get ElixiHub configuration
+    elixihub_config = Application.get_env(:agent_app, :elixihub)
+    base_url = (elixihub_config && elixihub_config[:elixihub_url]) || "http://localhost:4000"
+    
+    # Get authentication token
+    auth_config = Application.get_env(:agent_app, :auth)
+    token = auth_config && auth_config[:jwt_token]
+    
+    discovery_url = "#{base_url}/api/mcp/discovery"
+    
+    headers = [
+      {"Content-Type", "application/json"},
+      {"User-Agent", "AgentApp/1.0"}
+    ]
+    
+    headers = if token do
+      [{"Authorization", "Bearer #{token}"} | headers]
+    else
+      headers
+    end
+    
+    Logger.info("Discovering MCP servers from: #{discovery_url}")
+    
+    case HTTPoison.get(discovery_url, headers, recv_timeout: 10_000) do
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+        case Jason.decode(body) do
+          {:ok, %{"servers" => servers}} ->
+            normalized_servers = Enum.map(servers, &normalize_discovered_server/1)
+            {:ok, normalized_servers}
+          
+          {:ok, servers} when is_list(servers) ->
+            normalized_servers = Enum.map(servers, &normalize_discovered_server/1)
+            {:ok, normalized_servers}
+          
+          {:error, decode_error} ->
+            Logger.error("Failed to decode discovery response: #{inspect(decode_error)}")
+            {:error, {:decode_error, decode_error}}
+        end
+      
+      {:ok, %HTTPoison.Response{status_code: status_code, body: body}} ->
+        Logger.error("HTTP error from discovery endpoint: #{status_code} - #{body}")
+        {:error, {:http_error, status_code, body}}
+      
+      {:error, %HTTPoison.Error{reason: reason}} ->
+        Logger.error("Connection error to discovery endpoint: #{inspect(reason)}")
+        {:error, {:connection_error, reason}}
+    end
+  rescue
+    error ->
+      Logger.error("Exception during MCP server discovery: #{inspect(error)}")
+      {:error, {:exception, error}}
+  end
+
+  defp normalize_discovered_server(server) do
+    %{
+      name: server["name"],
+      url: server["url"],
+      description: server["description"] || "",
+      version: server["version"] || "1.0.0",
+      app_id: server["app_id"]
+    }
   end
 end

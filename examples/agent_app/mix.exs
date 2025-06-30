@@ -16,7 +16,7 @@ defmodule AgentApp.MixProject do
   def application do
     [
       mod: {AgentApp.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :httpoison]
     ]
   end
 
