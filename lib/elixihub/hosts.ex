@@ -123,11 +123,11 @@ defmodule Elixihub.Hosts do
   @doc """
   Converts a host to SSH configuration map.
   """
-  def host_to_ssh_config(%Host{} = host, username) do
+  def host_to_ssh_config(%Host{} = host) do
     %{
       host: host.ssh_hostname,
       port: host.ssh_port,
-      username: username,
+      username: host.ssh_username,
       password: host.ssh_password
     }
   end

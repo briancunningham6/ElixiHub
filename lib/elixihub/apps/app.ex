@@ -19,7 +19,6 @@ defmodule Elixihub.Apps.App do
     field :deploy_path, :string
     field :ssh_host, :string
     field :ssh_port, :integer, default: 22
-    field :ssh_username, :string
     
     belongs_to :node, Elixihub.Nodes.Node
     belongs_to :host, Elixihub.Hosts.Host
@@ -31,7 +30,7 @@ defmodule Elixihub.Apps.App do
   @doc false
   def changeset(app, attrs) do
     app
-    |> cast(attrs, [:name, :description, :url, :status, :node_id, :host_id, :deployment_status, :deployment_log, :deployed_at, :deploy_path, :ssh_host, :ssh_port, :ssh_username])
+    |> cast(attrs, [:name, :description, :url, :status, :node_id, :host_id, :deployment_status, :deployment_log, :deployed_at, :deploy_path, :ssh_host, :ssh_port])
     |> validate_required([:name, :description, :url])
     |> validate_inclusion(:status, @valid_statuses)
     |> validate_inclusion(:deployment_status, @valid_deployment_statuses)
@@ -45,7 +44,7 @@ defmodule Elixihub.Apps.App do
   @doc false
   def update_changeset(app, attrs) do
     app
-    |> cast(attrs, [:name, :description, :url, :status, :node_id, :host_id, :deployment_status, :deployment_log, :deployed_at, :deploy_path, :ssh_host, :ssh_port, :ssh_username])
+    |> cast(attrs, [:name, :description, :url, :status, :node_id, :host_id, :deployment_status, :deployment_log, :deployed_at, :deploy_path, :ssh_host, :ssh_port])
     |> validate_required([:name, :description, :url])
     |> validate_inclusion(:status, @valid_statuses)
     |> validate_inclusion(:deployment_status, @valid_deployment_statuses)

@@ -23,19 +23,21 @@ defmodule ElixihubWeb.Admin.AppLive.DeploySimpleComponent do
           prompt="Select a host..."
           required 
         />
-        <.input field={@form[:ssh_username]} type="text" label="SSH Username" placeholder="ubuntu" required />
         <.input field={@form[:deploy_path]} type="text" label="Deploy Path" placeholder="/opt/apps/myapp" required />
         
         <!-- File Upload Section -->
         <div class="space-y-4">
           <label class="block text-sm font-medium text-gray-700">Application Archive (.tar)</label>
-          <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+          <div 
+            class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md"
+            phx-drop-target={@uploads.tar_file.ref}
+          >
             <div class="space-y-1 text-center">
               <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
                 <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
               <div class="flex text-sm text-gray-600">
-                <label for="file-upload" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                <label class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
                   <span>Upload a file</span>
                   <.live_file_input upload={@uploads.tar_file} class="sr-only" />
                 </label>
@@ -89,7 +91,7 @@ defmodule ElixihubWeb.Admin.AppLive.DeploySimpleComponent do
                 Deployment Process
               </h3>
               <div class="mt-2 text-sm text-blue-700">
-                <p>1. Select a configured host and provide SSH username</p>
+                <p>1. Select a configured host (includes SSH credentials)</p>
                 <p>2. Upload your application tar file (.tar, .tgz, .tar.gz)</p>
                 <p>3. Specify the deployment path on the target server</p>
                 <p>4. Click Deploy to start the deployment process</p>
@@ -148,10 +150,9 @@ defmodule ElixihubWeb.Admin.AppLive.DeploySimpleComponent do
       |> assign(:form, to_form(changeset))
       |> assign(:host_options, host_options)
       |> allow_upload(:tar_file, 
-          accept: ~w(.tar .tgz .gz),
+          accept: ~w(.tar .tgz .tar.gz),
           max_entries: 1,
-          max_file_size: 100 * 1024 * 1024, # 100MB
-          auto_upload: true
+          max_file_size: 100 * 1024 * 1024 # 100MB
         )
 
     {:ok, socket}
@@ -180,14 +181,12 @@ defmodule ElixihubWeb.Admin.AppLive.DeploySimpleComponent do
     
     # Validate required fields
     with {:ok, host_id} <- validate_required_field(app_params["host_id"], "Host"),
-         {:ok, ssh_username} <- validate_required_field(app_params["ssh_username"], "SSH Username"),
          {:ok, deploy_path} <- validate_required_field(app_params["deploy_path"], "Deploy Path"),
          {:ok, uploaded_files} <- validate_uploaded_files(socket) do
       
       # Update app status to deploying
       {:ok, updated_app} = Apps.update_app(app, %{
         host_id: host_id,
-        ssh_username: ssh_username,
         deploy_path: deploy_path,
         deployment_status: "deploying",
         deployment_log: %{"start" => "Deployment started at #{DateTime.utc_now()}"}
@@ -246,7 +245,7 @@ defmodule ElixihubWeb.Admin.AppLive.DeploySimpleComponent do
       host = Hosts.get_host!(app.host_id)
       
       # Create SSH configuration
-      ssh_config = Hosts.host_to_ssh_config(host, app.ssh_username)
+      ssh_config = Hosts.host_to_ssh_config(host)
       
       # Update deployment log
       update_deployment_log(app, "connecting", "Connecting to #{host.name} (#{host.ip_address})")

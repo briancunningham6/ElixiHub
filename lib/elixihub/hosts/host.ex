@@ -6,6 +6,7 @@ defmodule Elixihub.Hosts.Host do
     field :name, :string
     field :ip_address, :string
     field :ssh_hostname, :string
+    field :ssh_username, :string
     field :ssh_password, :string
     field :ssh_port, :integer, default: 22
     field :description, :string
@@ -16,8 +17,8 @@ defmodule Elixihub.Hosts.Host do
   @doc false
   def changeset(host, attrs) do
     host
-    |> cast(attrs, [:name, :ip_address, :ssh_hostname, :ssh_password, :ssh_port, :description])
-    |> validate_required([:name, :ip_address, :ssh_hostname, :ssh_port])
+    |> cast(attrs, [:name, :ip_address, :ssh_hostname, :ssh_username, :ssh_password, :ssh_port, :description])
+    |> validate_required([:name, :ip_address, :ssh_hostname, :ssh_username, :ssh_port])
     |> validate_length(:name, min: 2, max: 100)
     |> validate_format(:ip_address, ~r/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/, message: "must be a valid IP address")
     |> validate_format(:ssh_hostname, ~r/^[a-zA-Z0-9.-]+$/, message: "must be a valid hostname or IP address")
