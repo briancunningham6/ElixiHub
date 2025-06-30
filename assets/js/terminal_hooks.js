@@ -3,14 +3,17 @@
 
 let Terminal = {
   mounted() {
+    console.log("Terminal hook mounted");
     this.terminal = null;
     this.connected = this.el.dataset.connected === "true";
+    console.log("Initial connection status:", this.connected);
     
     if (this.connected) {
       this.initTerminal();
     }
     
     this.handleEvent("shell_output", (payload) => {
+      console.log("Received shell output:", payload.data);
       if (this.terminal) {
         this.terminal.write(payload.data);
       }
@@ -19,13 +22,16 @@ let Terminal = {
 
   updated() {
     const newConnected = this.el.dataset.connected === "true";
+    console.log("Terminal updated, new connection status:", newConnected, "old:", this.connected);
     
     if (newConnected && !this.connected) {
       // Connection established
+      console.log("Establishing terminal connection");
       this.connected = true;
       this.initTerminal();
     } else if (!newConnected && this.connected) {
       // Connection lost
+      console.log("Terminal connection lost");
       this.connected = false;
       this.destroyTerminal();
     }
@@ -36,6 +42,7 @@ let Terminal = {
   },
 
   initTerminal() {
+    console.log("Initializing terminal");
     // Always use simple terminal for now until we load xterm.js properly
     this.initSimpleTerminal();
     return;
@@ -99,9 +106,13 @@ let Terminal = {
   },
 
   initSimpleTerminal() {
+    console.log("Initializing simple terminal");
     // Fallback terminal implementation without xterm.js
     const terminalElement = document.getElementById('xterm-terminal');
-    if (!terminalElement) return;
+    if (!terminalElement) {
+      console.log("Terminal element not found");
+      return;
+    }
 
     terminalElement.innerHTML = `
       <div class="simple-terminal p-4 font-mono text-sm h-96 overflow-y-auto bg-black text-white relative">

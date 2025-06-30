@@ -98,6 +98,37 @@ defmodule ElixihubWeb.Admin.HostLive.Shell do
   end
 
   @impl true
+  def handle_event("shell_input_form", %{"command" => command}, socket) do
+    if socket.assigns.connected do
+      # Add newline to command
+      command_with_newline = command <> "\n"
+      
+      case send_to_shell(socket, command_with_newline) do
+        :ok -> 
+          {:noreply, socket}
+        {:error, _reason} ->
+          # Connection lost, disconnect
+          socket = 
+            socket
+            |> assign(:connected, false)
+            |> assign(:connection_error, "Connection lost")
+            |> put_flash(:error, "SSH connection lost")
+
+          {:noreply, socket}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("insert_command", %{"command" => command}, socket) do
+    # Insert command text into the input field using JavaScript
+    socket = push_event(socket, "insert_text", %{text: command})
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_info({:shell_data, data}, socket) do
     new_output = socket.assigns.shell_output ++ [data]
     
@@ -111,7 +142,6 @@ defmodule ElixihubWeb.Admin.HostLive.Shell do
     socket = 
       socket
       |> assign(:shell_output, trimmed_output)
-      |> push_event("shell_output", %{data: data})
 
     {:noreply, socket}
   end
@@ -266,7 +296,36 @@ defmodule ElixihubWeb.Admin.HostLive.Shell do
                 <p class="text-sm">Click "Connect" to establish an SSH connection to <%= @host.name %></p>
               </div>
             <% else %>
-              <div id="xterm-terminal" class="h-96"></div>
+              <!-- Simple Terminal Interface -->
+              <div class="h-96 bg-black text-white font-mono text-sm flex flex-col">
+                <!-- Terminal Output -->
+                <div class="flex-1 p-4 overflow-y-auto whitespace-pre-wrap" id="terminal-output">
+                  <%= for {output, index} <- Enum.with_index(@shell_output) do %>
+                    <div id={"output-#{index}"}><%= output %></div>
+                  <% end %>
+                </div>
+                
+                <!-- Terminal Input -->
+                <div class="border-t border-gray-700 p-2 flex items-center">
+                  <span class="text-green-400 mr-2">$</span>
+                  <form phx-submit="shell_input_form" class="flex-1">
+                    <input 
+                      type="text" 
+                      name="command" 
+                      value=""
+                      placeholder="Type your command and press Enter..."
+                      class="w-full bg-transparent border-none outline-none text-white"
+                      autocomplete="off"
+                      phx-hook="TerminalInput"
+                      id="terminal-input"
+                    />
+                  </form>
+                </div>
+              </div>
+              
+              <div class="text-xs text-gray-500 p-2">
+                Connection status: Connected | Output lines: <%= length(@shell_output) %>
+              </div>
             <% end %>
           </div>
         </div>
@@ -276,36 +335,36 @@ defmodule ElixihubWeb.Admin.HostLive.Shell do
             <h3 class="text-sm font-medium text-gray-300 mb-2">Quick Commands</h3>
             <div class="flex flex-wrap gap-2">
               <button 
-                phx-click="shell_input" 
-                phx-value-data="ls -la\n"
+                phx-click="insert_command" 
+                phx-value-command="ls -la"
                 class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm text-gray-300"
               >
                 ls -la
               </button>
               <button 
-                phx-click="shell_input" 
-                phx-value-data="pwd\n"
+                phx-click="insert_command" 
+                phx-value-command="pwd"
                 class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm text-gray-300"
               >
                 pwd
               </button>
               <button 
-                phx-click="shell_input" 
-                phx-value-data="top\n"
+                phx-click="insert_command" 
+                phx-value-command="top"
                 class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm text-gray-300"
               >
                 top
               </button>
               <button 
-                phx-click="shell_input" 
-                phx-value-data="df -h\n"
+                phx-click="insert_command" 
+                phx-value-command="df -h"
                 class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm text-gray-300"
               >
                 df -h
               </button>
               <button 
-                phx-click="shell_input" 
-                phx-value-data="systemctl status\n"
+                phx-click="insert_command" 
+                phx-value-command="systemctl status"
                 class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm text-gray-300"
               >
                 systemctl status

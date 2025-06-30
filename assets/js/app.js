@@ -23,12 +23,13 @@ import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 import {ShellInput} from "./shell_hooks"
 import Terminal from "./terminal_hooks"
+import TerminalInput from "./terminal_input_hooks"
 
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 let liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {ShellInput, Terminal}
+  hooks: {ShellInput, Terminal, TerminalInput}
 })
 
 // Show progress bar on live navigation and form submits
