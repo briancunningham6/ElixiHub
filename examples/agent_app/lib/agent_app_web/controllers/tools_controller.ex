@@ -1,5 +1,9 @@
 defmodule AgentAppWeb.ToolsController do
-  use AgentAppWeb, :controller
+  use Phoenix.Controller,
+    formats: [:html, :json],
+    layouts: [html: AgentAppWeb.Layouts]
+    
+  import Plug.Conn
 
   def index(conn, _params) do
     case AgentApp.MCPManager.list_available_tools() do

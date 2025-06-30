@@ -1,5 +1,7 @@
 defmodule AgentAppWeb.ChatLive do
-  use AgentAppWeb, :live_view
+  use Phoenix.LiveView, layout: {AgentAppWeb.Layouts, :app}
+  
+  import AgentAppWeb.CoreComponents
 
   require Logger
 

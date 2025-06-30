@@ -29,7 +29,6 @@ defmodule AgentApp.MixProject do
       {:phoenix_html, "~> 4.2"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 0.20.2"},
-      {:heroicons, "~> 0.5"},
       {:phoenix_live_dashboard, "~> 0.8.3"},
       {:telemetry_metrics, "~> 0.6"},
       {:telemetry_poller, "~> 1.0"},
@@ -39,10 +38,17 @@ defmodule AgentApp.MixProject do
       {:bandit, "~> 1.2"},
       {:hackney, "~> 1.17"},
       {:httpoison, "~> 2.0"},
+      {:finch, "~> 0.13"},
       {:joken, "~> 2.6"},
       {:jose, "~> 1.11"},
-      {:openai, "~> 0.5.2"},
-      {:mcp, github: "sasa1977/mcp", branch: "main"},
+      {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
+      {:heroicons,
+       github: "tailwindlabs/heroicons",
+       tag: "v2.1.1",
+       sparse: "optimized",
+       app: false,
+       compile: false,
+       depth: 1},
       {:tailwind, "~> 0.2", runtime: Mix.env() == :dev}
     ]
   end
@@ -50,10 +56,11 @@ defmodule AgentApp.MixProject do
   defp aliases do
     [
       setup: ["deps.get", "assets.setup", "assets.build"],
-      "assets.setup": ["tailwind.install --if-missing"],
-      "assets.build": ["tailwind agent_app"],
+      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
+      "assets.build": ["tailwind agent_app", "esbuild agent_app"],
       "assets.deploy": [
         "tailwind agent_app --minify",
+        "esbuild agent_app --minify",
         "phx.digest"
       ]
     ]

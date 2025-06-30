@@ -19,6 +19,10 @@ defmodule AgentAppWeb do
 
   def static_paths, do: ~w(assets fonts images favicon.ico robots.txt)
 
+  defmacro __using__(which) when is_atom(which) do
+    apply(__MODULE__, which, [])
+  end
+
   def router do
     quote do
       use Phoenix.Router, helpers: false

@@ -35,3 +35,18 @@ elixihub-*.tar
 npm-debug.log
 /assets/node_modules/
 
+# Example apps build directories
+/examples/agent_app/_build/
+/examples/agent_app/deps/
+/examples/agent_app/priv/static/assets/
+/examples/agent_app/priv/static/cache_manifest.json
+/examples/agent_app/assets/node_modules/
+/examples/agent_app/*.tar
+
+/examples/hello_world_app/_build/
+/examples/hello_world_app/deps/
+/examples/hello_world_app/priv/static/assets/
+/examples/hello_world_app/priv/static/cache_manifest.json
+/examples/hello_world_app/assets/node_modules/
+/examples/hello_world_app/*.tar
+

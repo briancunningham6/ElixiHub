@@ -209,6 +209,65 @@ defmodule AgentAppWeb.CoreComponents do
     )
   end
 
+  @doc """
+  Renders flash notices.
+  """
+  attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
+  attr :kind, :atom, values: [:info, :error], doc: "used for styling and flash lookup"
+  attr :title, :string, doc: "the title of the flash message"
+  attr :id, :string, doc: "the optional id of flash container"
+  attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
+  
+  slot :inner_block, doc: "the optional inner block that renders the flash message"
+
+  def flash(assigns) do
+    ~H"""
+    <div
+      :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
+      id={@id}
+      phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
+      role="alert"
+      class={[
+        "fixed top-2 right-2 mr-2 w-80 sm:w-96 z-50 rounded-lg p-3 ring-1",
+        @kind == :info && "bg-emerald-50 text-emerald-800 ring-emerald-500 fill-cyan-900",
+        @kind == :error && "bg-rose-50 text-rose-900 shadow-md ring-rose-500 fill-rose-900"
+      ]}
+      {@rest}
+    >
+      <p class="flex items-center gap-1.5 text-sm font-semibold leading-6">
+        <svg :if={@kind == :info} class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd" />
+        </svg>
+        <svg :if={@kind == :error} class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" />
+        </svg>
+        <%= @title %>
+      </p>
+      <p class="mt-2 text-sm leading-5"><%= msg %></p>
+      <button type="button" class="group absolute top-1 right-1 p-2" aria-label="close">
+        <svg class="h-5 w-5 opacity-40 group-hover:opacity-70" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+        </svg>
+      </button>
+    </div>
+    """
+  end
+
+  @doc """
+  Shows the flash group with all flash messages.
+  """
+  attr :flash, :map, required: true, doc: "the map of flash messages"
+  attr :id, :string, default: "flash-group", doc: "the optional id of flash container"
+
+  def flash_group(assigns) do
+    ~H"""
+    <div id={@id}>
+      <.flash kind={:info} title="Success!" id="flash-info" flash={@flash} />
+      <.flash kind={:error} title="Error!" id="flash-error" flash={@flash} />
+    </div>
+    """
+  end
+
   defp translate_error({msg, opts}) do
     # You can make use of gettext to translate error messages by
     # uncommenting and adjusting the following code:

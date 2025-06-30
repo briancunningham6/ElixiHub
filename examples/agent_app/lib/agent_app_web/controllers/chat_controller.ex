@@ -1,5 +1,9 @@
 defmodule AgentAppWeb.ChatController do
-  use AgentAppWeb, :controller
+  use Phoenix.Controller,
+    formats: [:html, :json],
+    layouts: [html: AgentAppWeb.Layouts]
+    
+  import Plug.Conn
 
   def create(conn, %{"message" => message}) do
     current_user = AgentApp.Auth.get_current_user(conn)

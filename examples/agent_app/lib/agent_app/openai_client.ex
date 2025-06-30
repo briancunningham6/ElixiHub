@@ -116,37 +116,37 @@ defmodule AgentApp.OpenAIClient do
     api_key = config[:api_key]
     
     if !api_key do
-      return {:error, :no_api_key}
-    end
-
-    url = "https://api.openai.com/v1" <> endpoint
-    
-    headers = [
-      {"Authorization", "Bearer #{api_key}"},
-      {"Content-Type", "application/json"},
-      {"User-Agent", "AgentApp/1.0"}
-    ]
-
-    http_options = config[:http_options] || []
-
-    case HTTPoison.post(url, Jason.encode!(body), headers, http_options) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
-        case Jason.decode(response_body) do
-          {:ok, decoded} -> {:ok, decoded}
-          {:error, reason} -> {:error, {:decode_error, reason}}
-        end
+      {:error, :no_api_key}
+    else
+      url = "https://api.openai.com/v1" <> endpoint
       
-      {:ok, %HTTPoison.Response{status_code: status_code, body: response_body}} ->
-        case Jason.decode(response_body) do
-          {:ok, %{"error" => error}} ->
-            {:error, {:api_error, status_code, error}}
-          
-          _ ->
-            {:error, {:http_error, status_code, response_body}}
-        end
-      
-      {:error, %HTTPoison.Error{reason: reason}} ->
-        {:error, {:connection_error, reason}}
+      headers = [
+        {"Authorization", "Bearer #{api_key}"},
+        {"Content-Type", "application/json"},
+        {"User-Agent", "AgentApp/1.0"}
+      ]
+
+      http_options = config[:http_options] || []
+
+      case HTTPoison.post(url, Jason.encode!(body), headers, http_options) do
+        {:ok, %HTTPoison.Response{status_code: 200, body: response_body}} ->
+          case Jason.decode(response_body) do
+            {:ok, decoded} -> {:ok, decoded}
+            {:error, reason} -> {:error, {:decode_error, reason}}
+          end
+        
+        {:ok, %HTTPoison.Response{status_code: status_code, body: response_body}} ->
+          case Jason.decode(response_body) do
+            {:ok, %{"error" => error}} ->
+              {:error, {:api_error, status_code, error}}
+            
+            _ ->
+              {:error, {:http_error, status_code, response_body}}
+          end
+        
+        {:error, %HTTPoison.Error{reason: reason}} ->
+          {:error, {:connection_error, reason}}
+      end
     end
   end
 end
