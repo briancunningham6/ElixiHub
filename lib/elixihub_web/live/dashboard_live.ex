@@ -123,7 +123,7 @@ defmodule ElixihubWeb.DashboardLive do
         <div class="bg-white shadow rounded-lg">
           <div class="px-4 py-5 sm:p-6">
             <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Actions</h3>
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <.link
                 navigate={~p"/admin/users"}
                 class="relative group bg-white p-6 focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 rounded-lg border border-gray-300 hover:border-gray-400"

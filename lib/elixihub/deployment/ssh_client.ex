@@ -23,19 +23,26 @@ defmodule Elixihub.Deployment.SSHClient do
   - {:error, reason} on failure
   """
   def connect(config) do
-    host = String.to_charlist(config.host)
-    port = Map.get(config, :port, @default_port)
-    username = String.to_charlist(config.username)
-    timeout = Map.get(config, :timeout, @default_timeout)
+    # Validate required configuration
+    case validate_ssh_config(config) do
+      {:ok, validated_config} ->
+        host = String.to_charlist(validated_config.host)
+        port = Map.get(validated_config, :port, @default_port)
+        username = String.to_charlist(validated_config.username)
+        timeout = Map.get(validated_config, :timeout, @default_timeout)
 
-    ssh_opts = build_ssh_options(config)
+        ssh_opts = build_ssh_options(validated_config)
 
-    case :ssh.connect(host, port, ssh_opts, timeout) do
-      {:ok, connection} ->
-        {:ok, connection}
+        case :ssh.connect(host, port, ssh_opts, timeout) do
+          {:ok, connection} ->
+            {:ok, connection}
+          
+          {:error, reason} ->
+            {:error, "SSH connection failed: #{inspect(reason)}"}
+        end
       
       {:error, reason} ->
-        {:error, "SSH connection failed: #{inspect(reason)}"}
+        {:error, reason}
     end
   end
 
@@ -231,6 +238,19 @@ defmodule Elixihub.Deployment.SSHClient do
     after
       30_000 ->
         {:error, "Command execution timeout"}
+    end
+  end
+
+  defp validate_ssh_config(config) do
+    cond do
+      is_nil(config.host) or config.host == "" ->
+        {:error, "SSH host is required"}
+      
+      is_nil(config.username) or config.username == "" ->
+        {:error, "SSH username is required"}
+      
+      true ->
+        {:ok, config}
     end
   end
 end

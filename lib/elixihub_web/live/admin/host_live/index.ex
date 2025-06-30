@@ -41,6 +41,12 @@ defmodule ElixihubWeb.Admin.HostLive.Index do
     |> assign(:host, Hosts.get_host!(id))
   end
 
+  defp apply_action(socket, :restart_confirm, %{"id" => id}) do
+    socket
+    |> assign(:page_title, "Restart Host")
+    |> assign(:host, Hosts.get_host!(id))
+  end
+
   @impl true
   def handle_info({ElixihubWeb.Admin.HostLive.FormComponent, {:saved, _host}}, socket) do
     {:noreply, assign(socket, :hosts, Hosts.list_hosts())}
@@ -68,6 +74,42 @@ defmodule ElixihubWeb.Admin.HostLive.Index do
       
       {:error, reason} ->
         put_flash(socket, :error, "#{host.name}: Connection failed - #{reason}")
+    end
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("restart_host", %{"id" => id}, socket) do
+    host = Hosts.get_host!(id)
+    
+    # Start restart process asynchronously
+    Task.start(fn ->
+      case Hosts.restart_host(host) do
+        {:ok, message} ->
+          send(self(), {:restart_complete, host.id, :success, message})
+        {:error, reason} ->
+          send(self(), {:restart_complete, host.id, :error, reason})
+      end
+    end)
+    
+    socket = 
+      socket
+      |> put_flash(:info, "Restart initiated for #{host.name}. This may take a few moments...")
+      |> push_patch(to: ~p"/admin/hosts")
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:restart_complete, host_id, status, result}, socket) do
+    host = Hosts.get_host!(host_id)
+    
+    socket = case status do
+      :success ->
+        put_flash(socket, :info, "#{host.name}: #{result}")
+      :error ->
+        put_flash(socket, :error, "#{host.name}: Restart failed - #{result}")
     end
 
     {:noreply, socket}
@@ -127,7 +169,6 @@ defmodule ElixihubWeb.Admin.HostLive.Index do
                   <p class="text-sm text-gray-500 mt-1"><%= host.description %></p>
                   <div class="text-sm text-gray-600 mt-1">
                     <div>IP Address: <span class="font-mono"><%= host.ip_address %></span></div>
-                    <div>SSH Host: <span class="font-mono"><%= host.ssh_hostname %></span></div>
                     <div>SSH Port: <span class="font-mono"><%= host.ssh_port %></span></div>
                   </div>
                   <div class="text-xs text-gray-400 mt-1">
@@ -143,6 +184,20 @@ defmodule ElixihubWeb.Admin.HostLive.Index do
                   >
                     Test Connection
                   </button>
+                  
+                  <.link
+                    navigate={~p"/admin/hosts/#{host}/shell"}
+                    class="text-purple-600 hover:text-purple-900 text-sm font-medium"
+                  >
+                    Launch Shell
+                  </.link>
+                  
+                  <.link
+                    patch={~p"/admin/hosts/#{host}/restart"}
+                    class="text-orange-600 hover:text-orange-900 text-sm font-medium"
+                  >
+                    Restart
+                  </.link>
                   
                   <.link
                     patch={~p"/admin/hosts/#{host}/edit"}
@@ -200,6 +255,73 @@ defmodule ElixihubWeb.Admin.HostLive.Index do
         host={@host}
         patch={~p"/admin/hosts"}
       />
+    </.modal>
+
+    <.modal
+      :if={@live_action == :restart_confirm}
+      id="restart-confirm-modal"
+      show
+      on_cancel={JS.patch(~p"/admin/hosts")}
+    >
+      <div class="sm:flex sm:items-start">
+        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+          <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+        </div>
+        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+          <h3 class="text-lg leading-6 font-medium text-gray-900">
+            Restart Host
+          </h3>
+          <div class="mt-2">
+            <p class="text-sm text-gray-500">
+              Are you sure you want to restart <strong><%= @host.name %></strong> (<%= @host.ip_address %>)?
+            </p>
+            <div class="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <div class="flex">
+                <div class="flex-shrink-0">
+                  <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+                <div class="ml-3">
+                  <h3 class="text-sm font-medium text-yellow-800">
+                    Warning
+                  </h3>
+                  <div class="mt-2 text-sm text-yellow-700">
+                    <ul class="list-disc list-inside space-y-1">
+                      <li>This will reboot the entire host system</li>
+                      <li>All running applications will be interrupted</li>
+                      <li>The host will be temporarily unavailable</li>
+                      <li>This action cannot be undone</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+        <button
+          type="button"
+          phx-click="restart_host"
+          phx-value-id={@host.id}
+          class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
+        >
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Restart Host
+        </button>
+        <button
+          type="button"
+          phx-click={JS.patch(~p"/admin/hosts")}
+          class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm"
+        >
+          Cancel
+        </button>
+      </div>
     </.modal>
     """
   end

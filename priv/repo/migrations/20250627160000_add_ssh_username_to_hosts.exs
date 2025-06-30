@@ -3,7 +3,7 @@ defmodule Elixihub.Repo.Migrations.AddSshUsernameToHosts do
 
   def change do
     alter table(:hosts) do
-      add :ssh_username, :string
+      add :ssh_username, :string, default: "root"
     end
   end
 end

@@ -122,6 +122,8 @@ defmodule ElixihubWeb.Router do
     live "/admin/hosts", Admin.HostLive.Index, :index
     live "/admin/hosts/new", Admin.HostLive.Index, :new
     live "/admin/hosts/:id/edit", Admin.HostLive.Index, :edit
+    live "/admin/hosts/:id/restart", Admin.HostLive.Index, :restart_confirm
+    live "/admin/hosts/:host_id/shell", Admin.HostLive.Shell, :show
     
     # Admin App Management
     live "/admin/apps", Admin.AppLive.Index, :index
