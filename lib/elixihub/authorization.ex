@@ -39,6 +39,22 @@ defmodule Elixihub.Authorization do
   def get_role!(id), do: Repo.get!(Role, id)
 
   @doc """
+  Gets a role by name.
+
+  ## Examples
+
+      iex> get_role_by_name("admin")
+      %Role{}
+
+      iex> get_role_by_name("nonexistent")
+      nil
+
+  """
+  def get_role_by_name(name) do
+    Repo.get_by(Role, name: name)
+  end
+
+  @doc """
   Creates a role.
 
   ## Examples

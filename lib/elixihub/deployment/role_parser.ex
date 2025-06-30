@@ -14,6 +14,8 @@ defmodule Elixihub.Deployment.RoleParser do
   - mix.exs (for Elixir apps with elixihub_roles function)
   """
   def extract_roles(connection, app_path) do
+    IO.puts("Extracting roles from app path: #{app_path}")
+    
     role_files = [
       "#{app_path}/roles.json",
       "#{app_path}/config/roles.json", 
@@ -22,20 +24,32 @@ defmodule Elixihub.Deployment.RoleParser do
       "#{app_path}/mix.exs"
     ]
 
+    IO.puts("Looking for role files: #{inspect(role_files)}")
     extract_from_files(connection, role_files)
   end
 
   defp extract_from_files(connection, files) do
     Enum.reduce_while(files, [], fn file, acc ->
+      IO.puts("Checking file: #{file}")
       case extract_from_file(connection, file) do
-        {:ok, roles} when roles != [] -> {:halt, {:ok, roles}}
-        {:ok, []} -> {:cont, acc}
-        {:error, _} -> {:cont, acc}
+        {:ok, roles} when roles != [] -> 
+          IO.puts("Found #{length(roles)} roles in #{file}")
+          {:halt, {:ok, roles}}
+        {:ok, []} -> 
+          IO.puts("No roles found in #{file}")
+          {:cont, acc}
+        {:error, reason} -> 
+          IO.puts("Failed to read #{file}: #{inspect(reason)}")
+          {:cont, acc}
       end
     end)
     |> case do
-      {:ok, roles} -> {:ok, roles}
-      [] -> {:ok, []}
+      {:ok, roles} -> 
+        IO.puts("Successfully extracted roles: #{inspect(roles)}")
+        {:ok, roles}
+      [] -> 
+        IO.puts("No roles found in any file")
+        {:ok, []}
     end
   end
 
@@ -142,23 +156,29 @@ defmodule Elixihub.Deployment.RoleParser do
   end
 
   defp valid_role?(role) when is_map(role) do
-    has_required_fields?(role) && valid_identifier?(role["identifier"])
+    has_required_fields?(role) && valid_identifier?(role["identifier"] || role["name"])
   end
   defp valid_role?(_), do: false
 
   defp has_required_fields?(role) do
-    role["identifier"] && role["name"] && 
-    is_binary(role["identifier"]) && is_binary(role["name"])
+    # Accept either identifier+name OR just name (which will serve as both)
+    (role["identifier"] && role["name"] && 
+     is_binary(role["identifier"]) && is_binary(role["name"])) ||
+    (role["name"] && is_binary(role["name"]))
   end
 
   defp valid_identifier?(identifier) do
-    String.match?(identifier, ~r/^[a-z0-9_]+$/)
+    String.match?(identifier, ~r/^[a-z0-9_:]+$/)
   end
 
   defp normalize_role(role) do
+    # If no identifier provided, use name as identifier
+    identifier = role["identifier"] || role["name"]
+    name = role["name"]
+    
     %{
-      identifier: role["identifier"],
-      name: role["name"],
+      identifier: identifier,
+      name: name,
       description: role["description"] || "",
       permissions: role["permissions"] || %{},
       metadata: role["metadata"] || %{}

@@ -96,6 +96,22 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
     }
   end
 
+  @impl true
+  def handle_info({:undeploy_and_delete_complete, app_name, status, result}, socket) do
+    # Refresh the apps list to show the app has been deleted
+    {:noreply, 
+     socket
+     |> assign(:apps, Apps.list_apps())
+     |> put_flash(case status do
+       :success -> :info
+       :error -> :error
+     end, case status do
+       :success -> "#{app_name} undeployed and deleted successfully!"
+       :error -> "Failed to undeploy and delete #{app_name}: #{inspect(result)}"
+     end)
+    }
+  end
+
   # Private function to perform undeployment in background
   defp perform_undeployment(app, user, parent_pid) do
     case get_ssh_config(app) do
@@ -140,16 +156,81 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
     Map.put(ssh_config, :private_key, private_key)
   end
 
+  # Private function to perform undeployment followed by deletion
+  defp perform_undeploy_and_delete(app, user, parent_pid) do
+    app_name = app.name
+    
+    case get_ssh_config(app) do
+      {:ok, ssh_config} ->
+        case Elixihub.Deployment.undeploy_app(app, ssh_config) do
+          {:ok, _undeploy_result} ->
+            # Undeployment successful, now delete the app record
+            case Elixihub.Apps.delete_app(app) do
+              {:ok, _} ->
+                send(parent_pid, {:undeploy_and_delete_complete, app_name, :success, "App undeployed and deleted"})
+              {:error, reason} ->
+                send(parent_pid, {:undeploy_and_delete_complete, app_name, :error, "Undeployed but failed to delete: #{inspect(reason)}"})
+            end
+          
+          {:error, reason} ->
+            # Undeployment failed, still try to delete the app record
+            case Elixihub.Apps.delete_app(app) do
+              {:ok, _} ->
+                send(parent_pid, {:undeploy_and_delete_complete, app_name, :error, "Failed to undeploy but deleted app record: #{inspect(reason)}"})
+              {:error, delete_reason} ->
+                send(parent_pid, {:undeploy_and_delete_complete, app_name, :error, "Failed to undeploy AND delete: undeploy error: #{inspect(reason)}, delete error: #{inspect(delete_reason)}"})
+            end
+        end
+      
+      {:error, reason} ->
+        # Can't get SSH config, just delete the app record
+        case Elixihub.Apps.delete_app(app) do
+          {:ok, _} ->
+            send(parent_pid, {:undeploy_and_delete_complete, app_name, :error, "No SSH config available but deleted app record: #{reason}"})
+          {:error, delete_reason} ->
+            send(parent_pid, {:undeploy_and_delete_complete, app_name, :error, "No SSH config and failed to delete: #{inspect(delete_reason)}"})
+        end
+    end
+  end
+
   @impl true
   def handle_event("delete", %{"id" => id}, socket) do
-    app = Apps.get_app!(id)
-    {:ok, _} = Apps.delete_app(app)
+    app = Apps.get_app!(id) |> Elixihub.Repo.preload([:node, :host])
+    
+    case app.deployment_status do
+      "deployed" ->
+        # App is deployed, need to undeploy first
+        if app.host || app.node do
+          # Start undeployment and deletion in background
+          parent_pid = self()
+          spawn(fn -> perform_undeploy_and_delete(app, socket.assigns.current_user, parent_pid) end)
+          
+          {:noreply,
+           socket
+           |> assign(:apps, Apps.list_apps())
+           |> put_flash(:info, "Undeploying and deleting #{app.name}...")
+          }
+        else
+          # No host/node config, just delete the app record
+          {:ok, _} = Apps.delete_app(app)
+          
+          {:noreply,
+           socket
+           |> assign(:apps, Apps.list_apps())
+           |> put_flash(:info, "Application deleted successfully")
+          }
+        end
+      
+      _ ->
+        # App is not deployed, delete directly
+        {:ok, _} = Apps.delete_app(app)
 
-    {:noreply, 
-     socket
-     |> assign(:apps, Apps.list_apps())
-     |> put_flash(:info, "Application deleted successfully")
-    }
+        {:noreply, 
+         socket
+         |> assign(:apps, Apps.list_apps())
+         |> put_flash(:info, "Application deleted successfully")
+        }
+    end
   end
 
   @impl true
@@ -355,7 +436,11 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
                   <button
                     phx-click="delete"
                     phx-value-id={app.id}
-                    data-confirm="Are you sure you want to delete this application? This action cannot be undone."
+                    data-confirm={if app.deployment_status == "deployed" do
+                      "Are you sure you want to delete this application? This will first undeploy the application (stop service, remove files) and then delete the app record. This action cannot be undone."
+                    else
+                      "Are you sure you want to delete this application? This action cannot be undone."
+                    end}
                     class="text-red-600 hover:text-red-900 text-sm font-medium"
                   >
                     Delete

@@ -107,6 +107,7 @@ defmodule Elixihub.Deployment do
          {:ok, conn} <- SSHClient.connect(ssh_config),
          {:ok, result} <- AppInstaller.undeploy_app(conn, app, extract_path),
          {:ok, _} <- SSHClient.disconnect(conn),
+         {:ok, _} <- cleanup_app_authorization_roles(app),
          {:ok, _} <- update_deployment_status(app, "pending") do
       log_undeployment_success(app, result)
       {:ok, result}
@@ -241,13 +242,90 @@ defmodule Elixihub.Deployment do
   # Private functions
 
   defp sync_app_roles(%App{} = app, roles) when is_list(roles) do
+    # First sync to app_roles table
     case Elixihub.Apps.sync_app_roles(app.id, roles) do
       {:ok, _} -> 
-        add_deployment_log(app, "Synced #{length(roles)} role(s): #{Enum.map(roles, & &1.name) |> Enum.join(", ")}")
-        {:ok, :roles_synced}
+        add_deployment_log(app, "Synced #{length(roles)} app role(s): #{Enum.map(roles, & &1.name) |> Enum.join(", ")}")
+        
+        # Then sync to main authorization system for user assignment
+        case sync_to_authorization_roles(app, roles) do
+          {:ok, synced_count} ->
+            add_deployment_log(app, "Synced #{synced_count} role(s) to authorization system")
+            {:ok, :roles_synced}
+          {:error, reason} ->
+            add_deployment_log(app, "App roles synced but failed to sync to authorization system: #{inspect(reason)}")
+            {:ok, :partial_sync}  # Don't fail deployment for this
+        end
+        
       {:error, reason} ->
-        add_deployment_log(app, "Failed to sync roles: #{inspect(reason)}")
+        add_deployment_log(app, "Failed to sync app roles: #{inspect(reason)}")
         {:error, reason}
+    end
+  end
+
+  defp sync_to_authorization_roles(%App{} = app, roles) when is_list(roles) do
+    synced_count = 
+      roles
+      |> Enum.map(fn role ->
+        # Create role name with app prefix to avoid conflicts
+        role_name = "#{app.name}:#{role.identifier}"
+        role_description = "#{role.description} (from #{app.name} app)"
+        
+        case Elixihub.Authorization.get_role_by_name(role_name) do
+          nil ->
+            # Create new role
+            case Elixihub.Authorization.create_role(%{
+              name: role_name,
+              description: role_description
+            }) do
+              {:ok, _} -> 1
+              {:error, _} -> 0
+            end
+          
+          existing_role ->
+            # Update existing role description
+            case Elixihub.Authorization.update_role(existing_role, %{
+              description: role_description
+            }) do
+              {:ok, _} -> 1
+              {:error, _} -> 0
+            end
+        end
+      end)
+      |> Enum.sum()
+    
+    {:ok, synced_count}
+  rescue
+    error -> {:error, error}
+  end
+
+  defp cleanup_app_authorization_roles(%App{} = app) do
+    try do
+      # Get all app roles for this app
+      app_roles = Elixihub.Apps.list_app_roles(app.id)
+      
+      cleaned_count = 
+        app_roles
+        |> Enum.map(fn app_role ->
+          role_name = "#{app.name}:#{app_role.identifier}"
+          
+          case Elixihub.Authorization.get_role_by_name(role_name) do
+            nil -> 0
+            existing_role ->
+              case Elixihub.Authorization.delete_role(existing_role) do
+                {:ok, _} -> 1
+                {:error, _} -> 0
+              end
+          end
+        end)
+        |> Enum.sum()
+      
+      add_deployment_log(app, "Cleaned up #{cleaned_count} authorization role(s)")
+      {:ok, :roles_cleaned}
+    rescue
+      error -> 
+        add_deployment_log(app, "Failed to cleanup authorization roles: #{inspect(error)}")
+        {:ok, :cleanup_failed}  # Don't fail undeployment for this
     end
   end
 
