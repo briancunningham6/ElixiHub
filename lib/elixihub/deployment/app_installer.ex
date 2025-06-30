@@ -131,7 +131,9 @@ defmodule Elixihub.Deployment.AppInstaller do
     commands = [
       "cd #{extract_path}",
       "chmod +x #{extract_path}",
-      "find #{extract_path} -type f -name '*.sh' -exec chmod +x {} \\;"
+      "find #{extract_path} -type f -name '*.sh' -exec chmod +x {} \\;",
+      "chmod +x #{extract_path}/bin/* 2>/dev/null || true",
+      "find #{extract_path}/bin -type f -exec chmod +x {} \\; 2>/dev/null || true"
     ]
     
     execute_commands_sequence(connection, commands)
@@ -250,16 +252,16 @@ defmodule Elixihub.Deployment.AppInstaller do
 
   defp configure_app_service(connection, app, extract_path) do
     service_name = get_service_name(app)
-    service_file = generate_systemd_service(app, extract_path)
+    service_file = generate_systemd_service(app, extract_path, connection)
     service_path = "/etc/systemd/system/#{service_name}.service"
     
-    # Write service file
-    case write_service_file(connection, service_file, service_path) do
+    # Write service file using sudo
+    case write_service_file_with_sudo(connection, service_file, service_path) do
       {:ok, _} ->
         # Reload systemd and enable service
         execute_commands_sequence(connection, [
-          "systemctl daemon-reload",
-          "systemctl enable #{service_name}"
+          "sudo systemctl daemon-reload",
+          "sudo systemctl enable #{service_name}"
         ])
       
       {:error, reason} ->
@@ -267,14 +269,43 @@ defmodule Elixihub.Deployment.AppInstaller do
     end
   end
 
+  defp check_service_status_with_retries(connection, app, retries) when retries > 0 do
+    case get_app_service_status(connection, app) do
+      {:ok, "active"} -> {:ok, "active"}
+      {:ok, "activating"} -> 
+        :timer.sleep(2000)
+        check_service_status_with_retries(connection, app, retries - 1)
+      {:ok, status} -> {:ok, status}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+  
+  defp check_service_status_with_retries(connection, app, 0) do
+    get_app_service_status(connection, app)
+  end
+
   defp start_app_service(connection, app) do
     service_name = get_service_name(app)
     
-    case SSHClient.execute_command(connection, "systemctl start #{service_name}") do
+    case SSHClient.execute_command(connection, "sudo systemctl start #{service_name}") do
       {:ok, {_, _, 0}} ->
-        # Wait a moment and check if service is running
-        :timer.sleep(2000)
-        get_app_service_status(connection, app)
+        # Wait longer for Elixir application to start properly
+        :timer.sleep(5000)
+        
+        # Check status multiple times as Elixir apps can take time to start
+        case check_service_status_with_retries(connection, app, 3) do
+          {:ok, "active"} -> {:ok, :started}
+          {:ok, "activating"} -> 
+            # Give it more time for activating state
+            :timer.sleep(10000)
+            case get_app_service_status(connection, app) do
+              {:ok, "active"} -> {:ok, :started}
+              {:ok, status} -> {:error, "Service is still #{status} after extended wait. Check logs with: journalctl -u #{service_name} -f"}
+              {:error, reason} -> {:error, "Failed to check service status: #{reason}"}
+            end
+          {:ok, status} -> {:error, "Service started but status is: #{status}. Check logs with: journalctl -u #{service_name} -f"}
+          {:error, reason} -> {:error, "Failed to check service status: #{reason}"}
+        end
       
       {:ok, {_, error, exit_code}} ->
         {:error, "Failed to start service (exit #{exit_code}): #{error}"}
@@ -288,10 +319,10 @@ defmodule Elixihub.Deployment.AppInstaller do
     service_name = get_service_name(app)
     
     # Stop and remove service if it exists
-    SSHClient.execute_command(connection, "systemctl stop #{service_name} 2>/dev/null || true")
-    SSHClient.execute_command(connection, "systemctl disable #{service_name} 2>/dev/null || true")
-    SSHClient.execute_command(connection, "rm -f /etc/systemd/system/#{service_name}.service")
-    SSHClient.execute_command(connection, "systemctl daemon-reload")
+    SSHClient.execute_command(connection, "sudo systemctl stop #{service_name} 2>/dev/null || true")
+    SSHClient.execute_command(connection, "sudo systemctl disable #{service_name} 2>/dev/null || true")
+    SSHClient.execute_command(connection, "sudo rm -f /etc/systemd/system/#{service_name}.service")
+    SSHClient.execute_command(connection, "sudo systemctl daemon-reload")
     
     # Remove installation directory
     SSHClient.execute_command(connection, "rm -rf #{extract_path}")
@@ -331,69 +362,266 @@ defmodule Elixihub.Deployment.AppInstaller do
     "elixihub-#{app.name}" |> String.downcase() |> String.replace(~r/[^a-z0-9-]/, "-")
   end
 
-  defp generate_systemd_service(app, extract_path) do
+  defp generate_systemd_service(app, extract_path, connection) do
     service_name = get_service_name(app)
+    start_command = get_start_command(extract_path, connection)
+    
+    # Get the username from SSH config (the user deploying the app)
+    deploy_user = get_deploy_user(connection)
     
     """
     [Unit]
     Description=ElixiHub App: #{app.name}
     After=network.target
-
+    
     [Service]
-    Type=simple
-    User=elixihub
-    Group=elixihub
+    Type=exec
+    User=#{deploy_user}
+    Group=#{deploy_user}
     WorkingDirectory=#{extract_path}
-    ExecStart=#{get_start_command(extract_path)}
-    Restart=always
-    RestartSec=5
-    Environment=PORT=#{app.ssh_port || 4000}
+    ExecStart=#{start_command}
+    Restart=on-failure
+    RestartSec=10
+    TimeoutStartSec=60
+    TimeoutStopSec=30
+    Environment=PORT=#{get_app_port(app)}
     Environment=MIX_ENV=prod
+    Environment=PHX_SERVER=true
+    Environment=HOME=#{extract_path}
+    Environment=RELEASE_COOKIE=elixihub-#{service_name}
+    StandardOutput=journal
+    StandardError=journal
+    SyslogIdentifier=#{service_name}
 
     [Install]
     WantedBy=multi-user.target
     """
   end
 
-  defp get_start_command(extract_path) do
-    # Try to detect the appropriate start command
-    cond do
-      File.exists?(Path.join(extract_path, "_build/prod/rel")) ->
-        # Elixir release
-        release_name = extract_path |> Path.basename()
-        "#{extract_path}/_build/prod/rel/#{release_name}/bin/#{release_name} start"
-      
-      File.exists?(Path.join(extract_path, "package.json")) ->
-        # Node.js app
-        "#{extract_path}/node_modules/.bin/node #{extract_path}/index.js"
-      
-      File.exists?(Path.join(extract_path, "app")) ->
-        # Go binary
-        "#{extract_path}/app"
-      
-      true ->
-        # Generic
-        "#{extract_path}/start.sh"
+  defp is_file?(connection, path) do
+    case SSHClient.execute_command(connection, "test -f #{path}") do
+      {:ok, {_, _, 0}} -> true
+      _ -> false
     end
   end
 
-  defp write_service_file(connection, content, path) do
-    temp_file = "/tmp/service_#{:rand.uniform(10000)}"
+  defp get_start_command(extract_path, connection) do
+    # Try to detect the appropriate start command using remote filesystem
+    IO.puts("Detecting start command for: #{extract_path}")
     
-    case :file.write_file(temp_file, content) do
+    # First, let's see what files are actually in the extract path
+    case SSHClient.execute_command(connection, "find #{extract_path} -maxdepth 2 -type f -executable") do
+      {:ok, {output, _, 0}} ->
+        IO.puts("Executable files found:\n#{output}")
+      _ ->
+        IO.puts("Could not list executable files")
+    end
+    
+    case SSHClient.execute_command(connection, "ls -la #{extract_path}/") do
+      {:ok, {output, _, 0}} ->
+        IO.puts("Root directory contents:\n#{output}")
+      _ ->
+        IO.puts("Could not list root directory")
+    end
+    
+    cond do
+      SSHClient.path_exists?(connection, Path.join(extract_path, "_build/prod/rel")) ->
+        # Elixir release built with mix release
+        release_name = extract_path |> Path.basename()
+        command = "#{extract_path}/_build/prod/rel/#{release_name}/bin/#{release_name} start"
+        IO.puts("Detected Elixir release with _build: #{command}")
+        command
+      
+      SSHClient.path_exists?(connection, Path.join(extract_path, "bin")) ->
+        # Elixir release in bin directory - find the actual executable
+        release_name = extract_path |> Path.basename()
+        IO.puts("Release name from path basename: #{release_name}")
+        
+        # First, check if the expected executable name exists
+        potential_executable = Path.join(extract_path, "bin/#{release_name}")
+        IO.puts("Checking for potential executable: #{potential_executable}")
+        
+        if SSHClient.path_exists?(connection, potential_executable) do
+          command = "#{potential_executable} start"
+          IO.puts("Detected Elixir release in bin: #{command}")
+          command
+        else
+          IO.puts("Expected executable #{potential_executable} not found, searching for alternatives...")
+          
+          # Try common Elixir app names
+          common_names = ["hello_world_app", "hello", release_name]
+          found_executable = Enum.find(common_names, fn name ->
+            exe_path = Path.join(extract_path, "bin/#{name}")
+            IO.puts("Checking for: #{exe_path}")
+            SSHClient.path_exists?(connection, exe_path)
+          end)
+          
+          if found_executable do
+            command = "#{extract_path}/bin/#{found_executable} start"
+            IO.puts("Found executable by name: #{command}")
+            command
+          else
+            # Find any executable file in bin directory
+            case SSHClient.execute_command(connection, "find #{extract_path}/bin -type f -executable") do
+              {:ok, {output, _, 0}} ->
+                executables = output |> String.trim() |> String.split("\n") |> Enum.reject(&(&1 == ""))
+                IO.puts("Found executables in bin: #{inspect(executables)}")
+                
+                case executables do
+                  [first_executable | _] ->
+                    command = "#{first_executable} start"
+                    IO.puts("Using first executable found: #{command}")
+                    command
+                  [] ->
+                    # Fallback to expected name
+                    command = "#{extract_path}/bin/#{release_name} start"
+                    IO.puts("No executables found, using release name: #{command}")
+                    command
+                end
+              _ ->
+                command = "#{extract_path}/bin/#{release_name} start"
+                IO.puts("Could not find executables, using release name: #{command}")
+                command
+            end
+          end
+        end
+      
+      SSHClient.path_exists?(connection, Path.join(extract_path, "start.sh")) ->
+        # Generic start script
+        command = "#{extract_path}/start.sh"
+        IO.puts("Detected start script: #{command}")
+        command
+      
+      SSHClient.path_exists?(connection, Path.join(extract_path, "package.json")) ->
+        # Node.js app
+        command = "node #{extract_path}/index.js"
+        IO.puts("Detected Node.js app: #{command}")
+        command
+      
+      is_file?(connection, Path.join(extract_path, "app")) ->
+        # Go binary (only if it's actually a file, not directory)
+        command = "#{extract_path}/app"
+        IO.puts("Detected Go binary: #{command}")
+        command
+      
+      true ->
+        # Default fallback
+        command = "#{extract_path}/bin/start"
+        IO.puts("Using default fallback: #{command}")
+        command
+    end
+  end
+
+  defp write_service_file_with_sudo(connection, content, path) do
+    # Create a temporary file locally
+    local_temp_file = Path.join(System.tmp_dir(), "service_#{:rand.uniform(10000)}")
+    remote_temp_file = "/tmp/service_#{:rand.uniform(10000)}"
+    
+    IO.puts("Creating service file at: #{path}")
+    IO.puts("Local temp file: #{local_temp_file}")
+    IO.puts("Remote temp file: #{remote_temp_file}")
+    IO.puts("Service content:\n#{content}")
+    
+    case File.write(local_temp_file, content) do
       :ok ->
-        case SSHClient.upload_file(connection, temp_file, path) do
+        IO.puts("Successfully wrote local temp file")
+        case SSHClient.upload_file(connection, local_temp_file, remote_temp_file) do
           {:ok, _} ->
-            File.rm(temp_file)
-            {:ok, path}
+            IO.puts("Successfully uploaded file to remote")
+            # Use sudo to move the file to the system location and set proper ownership
+            move_command = "sudo mv #{remote_temp_file} #{path}"
+            IO.puts("Executing: #{move_command}")
+            
+            case SSHClient.execute_command(connection, move_command) do
+              {:ok, {stdout, stderr, 0}} ->
+                IO.puts("Successfully moved file to #{path}")
+                IO.puts("Move stdout: #{stdout}")
+                IO.puts("Move stderr: #{stderr}")
+                File.rm(local_temp_file)
+                
+                # Set proper ownership and permissions for systemd service file
+                chown_command = "sudo chown root:root #{path}"
+                chmod_command = "sudo chmod 644 #{path}"
+                
+                case SSHClient.execute_command(connection, chown_command) do
+                  {:ok, {_, _, 0}} ->
+                    IO.puts("Successfully set ownership to root:root")
+                    case SSHClient.execute_command(connection, chmod_command) do
+                      {:ok, {_, _, 0}} ->
+                        IO.puts("Successfully set permissions to 644")
+                        
+                        # Verify the file was created with correct ownership
+                        case SSHClient.execute_command(connection, "ls -la #{path}") do
+                          {:ok, {verify_output, _, 0}} ->
+                            IO.puts("Service file verification: #{verify_output}")
+                            {:ok, path}
+                          {:ok, {_, verify_error, exit_code}} ->
+                            IO.puts("Service file verification failed (exit #{exit_code}): #{verify_error}")
+                            {:error, "Service file was moved but verification failed"}
+                          {:error, verify_reason} ->
+                            IO.puts("Service file verification error: #{verify_reason}")
+                            {:error, "Service file verification error: #{verify_reason}"}
+                        end
+                      
+                      {:ok, {_, chmod_error, exit_code}} ->
+                        IO.puts("Failed to set permissions (exit #{exit_code}): #{chmod_error}")
+                        {:error, "Failed to set service file permissions"}
+                    end
+                  
+                  {:ok, {_, chown_error, exit_code}} ->
+                    IO.puts("Failed to set ownership (exit #{exit_code}): #{chown_error}")
+                    {:error, "Failed to set service file ownership"}
+                end
+              
+              {:ok, {stdout, stderr, exit_code}} ->
+                IO.puts("Move command failed (exit #{exit_code})")
+                IO.puts("Move stdout: #{stdout}")
+                IO.puts("Move stderr: #{stderr}")
+                File.rm(local_temp_file)
+                SSHClient.execute_command(connection, "rm -f #{remote_temp_file}")
+                {:error, "Failed to move service file (exit #{exit_code}): #{stderr}"}
+              
+              {:error, reason} ->
+                IO.puts("Move command error: #{inspect(reason)}")
+                File.rm(local_temp_file)
+                SSHClient.execute_command(connection, "rm -f #{remote_temp_file}")
+                {:error, "Move command failed: #{inspect(reason)}"}
+            end
           
           {:error, reason} ->
-            File.rm(temp_file)
-            {:error, reason}
+            IO.puts("File upload failed: #{inspect(reason)}")
+            File.rm(local_temp_file)
+            {:error, "File upload failed: #{inspect(reason)}"}
         end
       
       {:error, reason} ->
+        IO.puts("Failed to write local temp file: #{inspect(reason)}")
         {:error, "Failed to write temp service file: #{inspect(reason)}"}
+    end
+  end
+
+  defp get_deploy_user(connection) do
+    case SSHClient.execute_command(connection, "whoami") do
+      {:ok, {username, _, 0}} ->
+        String.trim(username)
+      
+      _ ->
+        "ubuntu"  # fallback
+    end
+  end
+
+  defp get_app_port(app) do
+    # Try to determine the port from app configuration or use a default
+    cond do
+      app.url && String.contains?(app.url, ":") ->
+        # Extract port from URL if present
+        case Regex.run(~r/:(\d+)/, app.url) do
+          [_, port] -> port
+          _ -> "4000"
+        end
+      
+      true ->
+        "4000"  # default port
     end
   end
 end

@@ -97,14 +97,31 @@ defmodule Elixihub.Deployment do
   Gets the deployment log for an app.
   """
   def get_deployment_log(%App{} = app) do
-    app.deployment_log || []
+    case app.deployment_log do
+      log when is_list(log) -> log
+      log when is_map(log) -> 
+        # Convert map to list format for backwards compatibility
+        Enum.map(log, fn {step, message} -> 
+          %{step: step, message: message, timestamp: DateTime.utc_now(), level: :info}
+        end)
+      _ -> []
+    end
   end
 
   @doc """
   Adds an entry to the deployment log.
   """
   def add_deployment_log(%App{} = app, entry) do
-    current_log = get_deployment_log(app)
+    current_log = case app.deployment_log do
+      log when is_list(log) -> log
+      log when is_map(log) -> 
+        # Convert existing map to list format
+        Enum.map(log, fn {step, message} -> 
+          %{step: step, message: message, timestamp: DateTime.utc_now(), level: :info}
+        end)
+      _ -> []
+    end
+    
     new_log = current_log ++ [%{
       timestamp: DateTime.utc_now(),
       message: entry,

@@ -130,7 +130,10 @@ defmodule ElixihubWeb.Admin.HostLive.Shell do
 
   @impl true
   def handle_info({:shell_data, data}, socket) do
-    new_output = socket.assigns.shell_output ++ [data]
+    # Clean ANSI escape sequences from the output
+    cleaned_data = clean_ansi_sequences(data)
+    
+    new_output = socket.assigns.shell_output ++ [cleaned_data]
     
     # Keep only last 1000 lines to prevent memory issues
     trimmed_output = if length(new_output) > 1000 do
@@ -446,5 +449,17 @@ defmodule ElixihubWeb.Admin.HostLive.Shell do
       :ssh_connection.close(socket.assigns.ssh_connection, socket.assigns.ssh_channel)
       Elixihub.Deployment.SSHClient.disconnect(socket.assigns.ssh_connection)
     end
+  end
+
+  defp clean_ansi_sequences(data) do
+    data
+    # Remove ANSI escape sequences (ESC[...m for colors, ESC[...H for cursor, etc.)
+    |> String.replace(~r/\e\[[0-9;]*[A-Za-z]/, "")
+    # Remove OSC sequences (like window title setting: ESC]0;title\a or ESC]0;title\007)
+    |> String.replace(~r/\e\][0-9]*;[^\a\007]*[\a\007]/, "")
+    # Remove other control sequences
+    |> String.replace(~r/\e\([AB]/, "")
+    # Remove backspace and other control characters (but keep \r, \n, \t)
+    |> String.replace(~r/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/, "")
   end
 end

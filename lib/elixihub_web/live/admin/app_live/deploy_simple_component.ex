@@ -23,7 +23,7 @@ defmodule ElixihubWeb.Admin.AppLive.DeploySimpleComponent do
           prompt="Select a host..."
           required 
         />
-        <.input field={@form[:deploy_path]} type="text" label="Deploy Path" placeholder="/opt/apps/myapp" required />
+        <.input field={@form[:deploy_path]} type="text" label="Deploy Path" placeholder="/home/{username}/dev/{app_name}" required />
         
         <!-- File Upload Section -->
         <div class="space-y-4">
@@ -160,9 +160,12 @@ defmodule ElixihubWeb.Admin.AppLive.DeploySimpleComponent do
 
   @impl true
   def handle_event("validate", %{"app" => app_params}, socket) do
+    # Generate default deploy path if host is selected and deploy_path is empty
+    updated_params = maybe_set_default_deploy_path(app_params, socket.assigns.app)
+    
     changeset =
       socket.assigns.app
-      |> Apps.change_app(app_params)
+      |> Apps.change_app(updated_params)
       |> Map.put(:action, :validate)
 
     socket = assign(socket, form: to_form(changeset))
@@ -241,35 +244,45 @@ defmodule ElixihubWeb.Admin.AppLive.DeploySimpleComponent do
 
   defp deploy_application(app, [uploaded_file_path], _user) do
     try do
+      IO.puts("Starting deployment for app: #{app.name}")
+      
       # Get host configuration
       host = Hosts.get_host!(app.host_id)
+      IO.puts("Host: #{host.name} (#{host.ip_address})")
       
       # Create SSH configuration
       ssh_config = Hosts.host_to_ssh_config(host)
+      IO.puts("SSH config: #{inspect(ssh_config, limit: :infinity)}")
       
       # Update deployment log
       update_deployment_log(app, "connecting", "Connecting to #{host.name} (#{host.ip_address})")
       
       # Deploy the application
+      IO.puts("Starting deployment with path: #{app.deploy_path}")
       case Deployment.deploy_app(ssh_config, uploaded_file_path, app.deploy_path, app) do
         {:ok, result} ->
+          IO.puts("Deployment successful: #{inspect(result)}")
           Apps.update_app(app, %{
             deployment_status: "deployed",
             deployed_at: DateTime.utc_now(),
-            deployment_log: Map.put(app.deployment_log, "success", "Deployment completed successfully: #{result}")
+            deployment_log: Map.put(app.deployment_log || %{}, "success", "Deployment completed successfully: #{inspect(result)}")
           })
           
         {:error, reason} ->
+          IO.puts("Deployment failed: #{inspect(reason)}")
           Apps.update_app(app, %{
             deployment_status: "failed",
-            deployment_log: Map.put(app.deployment_log, "error", "Deployment failed: #{reason}")
+            deployment_log: Map.put(app.deployment_log || %{}, "error", "Deployment failed: #{inspect(reason)}")
           })
       end
     rescue
       error ->
+        IO.puts("Deployment exception: #{inspect(error, limit: :infinity)}")
+        IO.puts("Stack trace: #{Exception.format(:error, error, __STACKTRACE__)}")
+        
         Apps.update_app(app, %{
           deployment_status: "failed",
-          deployment_log: Map.put(app.deployment_log, "exception", "Deployment failed with exception: #{inspect(error)}")
+          deployment_log: Map.put(app.deployment_log || %{}, "exception", "Deployment failed with exception: #{inspect(error)}")
         })
     after
       # Clean up uploaded file
@@ -309,4 +322,27 @@ defmodule ElixihubWeb.Admin.AppLive.DeploySimpleComponent do
   defp error_to_string(:too_many_files), do: "Too many files (max 1)"
   defp error_to_string(:not_accepted), do: "File type not accepted (only .tar, .tgz, .tar.gz)"
   defp error_to_string(error), do: "Upload error: #{inspect(error)}"
+
+  defp maybe_set_default_deploy_path(app_params, app) do
+    case {Map.get(app_params, "host_id"), Map.get(app_params, "deploy_path")} do
+      {host_id, deploy_path} when not is_nil(host_id) and host_id != "" and (is_nil(deploy_path) or deploy_path == "") ->
+        # Host is selected and deploy_path is empty, generate default
+        try do
+          host = Hosts.get_host!(host_id)
+          ssh_username = host.ssh_username || "ubuntu"  # fallback to ubuntu if nil
+          app_name = app.name |> String.downcase() |> String.replace(~r/[^a-z0-9_-]/, "_")
+          default_path = "/home/#{ssh_username}/dev/#{app_name}"
+          
+          Map.put(app_params, "deploy_path", default_path)
+        rescue
+          _ ->
+            # If host lookup fails, return original params
+            app_params
+        end
+      
+      _ ->
+        # Either no host selected or deploy_path already has a value
+        app_params
+    end
+  end
 end
