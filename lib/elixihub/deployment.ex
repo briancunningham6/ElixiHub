@@ -84,6 +84,42 @@ defmodule Elixihub.Deployment do
   end
 
   @doc """
+  Undeploys an application from a remote server via SSH.
+  
+  ## Parameters
+  - app: The app to undeploy
+  - ssh_config: SSH configuration map
+  
+  ## Returns
+  - {:ok, undeploy_result} on success
+  - {:error, reason} on failure
+  """
+  def undeploy_app(%App{} = app, ssh_config) when is_map(ssh_config) do
+    # Use the actual deployment path that was stored during deployment
+    extract_path = app.deploy_path || AppInstaller.get_deployment_path(app)
+    
+    IO.puts("Starting undeployment for app: #{app.name}")
+    IO.puts("Using extract_path: #{extract_path}")
+    IO.puts("SSH config: #{inspect(ssh_config)}")
+    
+    with {:ok, _} <- validate_ssh_config_for_undeploy(ssh_config),
+         {:ok, _} <- update_deployment_status(app, "undeploying"),
+         {:ok, conn} <- SSHClient.connect(ssh_config),
+         {:ok, result} <- AppInstaller.undeploy_app(conn, app, extract_path),
+         {:ok, _} <- SSHClient.disconnect(conn),
+         {:ok, _} <- update_deployment_status(app, "pending") do
+      log_undeployment_success(app, result)
+      {:ok, result}
+    else
+      {:error, reason} = error ->
+        IO.puts("Undeployment failed: #{inspect(reason)}")
+        update_deployment_status(app, "failed")
+        log_undeployment_error(app, reason)
+        error
+    end
+  end
+
+  @doc """
   Updates the deployment status of an app.
   """
   def update_deployment_status(%App{} = app, status) do
@@ -136,6 +172,24 @@ defmodule Elixihub.Deployment do
   """
   def validate_ssh_config(config) do
     required_keys = [:host, :username, :deploy_path]
+    
+    case Enum.find(required_keys, fn key -> not Map.has_key?(config, key) end) do
+      nil -> 
+        if Map.has_key?(config, :password) or Map.has_key?(config, :private_key) do
+          {:ok, config}
+        else
+          {:error, "Either password or private_key must be provided"}
+        end
+      missing_key -> 
+        {:error, "Missing required SSH config key: #{missing_key}"}
+    end
+  end
+
+  @doc """
+  Validates SSH configuration for undeployment (doesn't require deploy_path).
+  """
+  def validate_ssh_config_for_undeploy(config) do
+    required_keys = [:host, :username]
     
     case Enum.find(required_keys, fn key -> not Map.has_key?(config, key) end) do
       nil -> 
@@ -203,5 +257,13 @@ defmodule Elixihub.Deployment do
 
   defp log_deployment_error(app, reason) do
     add_deployment_log(app, "Deployment failed: #{inspect(reason)}")
+  end
+
+  defp log_undeployment_success(app, result) do
+    add_deployment_log(app, "Undeployment completed successfully: #{inspect(result)}")
+  end
+
+  defp log_undeployment_error(app, reason) do
+    add_deployment_log(app, "Undeployment failed: #{inspect(reason)}")
   end
 end

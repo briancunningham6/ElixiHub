@@ -3,7 +3,7 @@ defmodule Elixihub.Apps.App do
   import Ecto.Changeset
 
   @valid_statuses ["active", "inactive", "pending"]
-  @valid_deployment_statuses ["pending", "deploying", "deployed", "failed"]
+  @valid_deployment_statuses ["pending", "deploying", "deployed", "undeploying", "failed"]
 
   schema "apps" do
     field :name, :string

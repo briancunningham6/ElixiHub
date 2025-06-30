@@ -81,6 +81,66 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
   end
 
   @impl true
+  def handle_info({:undeployment_complete, app_id, status, result}, socket) do
+    # Refresh the apps list to show updated deployment status
+    {:noreply, 
+     socket
+     |> assign(:apps, Apps.list_apps())
+     |> put_flash(case status do
+       :success -> :info
+       :error -> :error
+     end, case status do
+       :success -> "Undeployment completed successfully!"
+       :error -> "Undeployment failed: #{inspect(result)}"
+     end)
+    }
+  end
+
+  # Private function to perform undeployment in background
+  defp perform_undeployment(app, user, parent_pid) do
+    case get_ssh_config(app) do
+      {:ok, ssh_config} ->
+        case Elixihub.Deployment.undeploy_app(app, ssh_config) do
+          {:ok, result} ->
+            send(parent_pid, {:undeployment_complete, app.id, :success, result})
+          {:error, reason} ->
+            send(parent_pid, {:undeployment_complete, app.id, :error, reason})
+        end
+      
+      {:error, reason} ->
+        send(parent_pid, {:undeployment_complete, app.id, :error, reason})
+    end
+  end
+
+  defp get_ssh_config(app) do
+    cond do
+      # Prefer host configuration (used in modern deployments)
+      app.host ->
+        {:ok, Elixihub.Hosts.host_to_ssh_config(app.host)}
+      
+      # Fallback to node configuration (legacy)
+      app.node ->
+        ssh_config = %{
+          host: app.node.host,
+          port: app.node.port || 22,
+          username: app.node.username,
+          password: app.node.password
+        }
+        |> maybe_add_private_key(app.node.private_key)
+        
+        {:ok, ssh_config}
+      
+      true ->
+        {:error, "No host or node configuration found"}
+    end
+  end
+
+  defp maybe_add_private_key(ssh_config, nil), do: ssh_config
+  defp maybe_add_private_key(ssh_config, private_key) do
+    Map.put(ssh_config, :private_key, private_key)
+  end
+
+  @impl true
   def handle_event("delete", %{"id" => id}, socket) do
     app = Apps.get_app!(id)
     {:ok, _} = Apps.delete_app(app)
@@ -110,6 +170,28 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
      |> assign(:apps, Apps.list_apps())
      |> put_flash(:info, message)
     }
+  end
+
+  @impl true
+  def handle_event("undeploy", %{"id" => id}, socket) do
+    app = Apps.get_app!(id) |> Elixihub.Repo.preload([:node, :host])
+    
+    if app.deployment_status == "deployed" and (app.host || app.node) do
+      # Start undeployment in background
+      parent_pid = self()
+      spawn(fn -> perform_undeployment(app, socket.assigns.current_user, parent_pid) end)
+      
+      {:noreply,
+       socket
+       |> assign(:apps, Apps.list_apps())
+       |> put_flash(:info, "Undeployment started for #{app.name}")
+      }
+    else
+      {:noreply,
+       socket
+       |> put_flash(:error, "Application is not deployed or has no assigned host/node")
+      }
+    end
   end
 
   @impl true
@@ -203,6 +285,7 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
                       case app.deployment_status do
                         "deployed" -> "bg-green-100 text-green-800"
                         "deploying" -> "bg-blue-100 text-blue-800"
+                        "undeploying" -> "bg-orange-100 text-orange-800"
                         "failed" -> "bg-red-100 text-red-800"
                         _ -> "bg-gray-100 text-gray-800"
                       end
@@ -237,6 +320,23 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
                   >
                     Deploy
                   </.link>
+                  
+                  <button
+                    :if={app.deployment_status == "deployed"}
+                    phx-click="undeploy"
+                    phx-value-id={app.id}
+                    data-confirm="Are you sure you want to undeploy this application? This will stop the service, remove all files, and delete the service."
+                    class="text-orange-600 hover:text-orange-900 text-sm font-medium"
+                  >
+                    Undeploy
+                  </button>
+                  
+                  <span
+                    :if={app.deployment_status == "undeploying"}
+                    class="text-orange-500 text-sm font-medium"
+                  >
+                    Undeploying...
+                  </span>
                   
                   <.link
                     navigate={~p"/admin/apps/#{app}/roles"}

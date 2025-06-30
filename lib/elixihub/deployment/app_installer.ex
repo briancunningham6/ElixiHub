@@ -94,6 +94,55 @@ defmodule Elixihub.Deployment.AppInstaller do
   end
 
   @doc """
+  Completely undeploys an application: stops service, removes files, deletes service.
+  
+  ## Parameters
+  - connection: SSH connection
+  - app: App struct with deployment details
+  - extract_path: Path where the application was deployed
+  
+  ## Returns
+  - {:ok, undeploy_result} on success
+  - {:error, reason} on failure
+  """
+  def undeploy_app(connection, %App{} = app, extract_path) do
+    service_name = get_service_name(app)
+    service_path = "/etc/systemd/system/#{service_name}.service"
+    
+    IO.puts("Starting undeploy for app: #{app.name}")
+    IO.puts("Service name: #{service_name}")
+    IO.puts("Service path: #{service_path}")
+    IO.puts("Extract path: #{extract_path}")
+    
+    undeployment_steps = [
+      {"Stop service", fn -> stop_app_service(connection, app) end},
+      {"Disable service", fn -> disable_app_service(connection, service_name) end},
+      {"Remove service file", fn -> remove_service_file(connection, service_path) end},
+      {"Reload systemd", fn -> reload_systemd(connection) end},
+      {"Remove application files", fn -> remove_app_files(connection, extract_path) end}
+    ]
+    
+    execute_undeployment_steps(undeployment_steps, [])
+  end
+
+  @doc """
+  Gets the deployment path for an app.
+  """
+  def get_deployment_path(%App{} = app, base_path \\ "/home") do
+    # Construct the deployment path based on app name and node info
+    app_name = String.downcase(app.name) |> String.replace(~r/[^a-z0-9_-]/, "-")
+    
+    if app.node do
+      case String.split(app.node.name, "@") do
+        [username, _host] -> "#{base_path}/#{username}/dev/#{app_name}"
+        _ -> "#{base_path}/#{app.node.name}/dev/#{app_name}"
+      end
+    else
+      "#{base_path}/dev/#{app_name}"
+    end
+  end
+
+  @doc """
   Restarts an application service.
   """
   def restart_app_service(connection, %App{} = app) do
@@ -873,19 +922,110 @@ defmodule Elixihub.Deployment.AppInstaller do
     
     cond do
       String.contains?(app_name_lower, "agent") ->
-        """
+        ~s"""
         Environment=OPENAI_API_KEY=your_openai_api_key_here
         Environment=ELIXIHUB_JWT_SECRET=your_elixihub_jwt_secret_here
         Environment=ELIXIHUB_URL=http://localhost:4000
-        Environment=HELLO_WORLD_MCP_URL=http://localhost:4001/api/mcp"""
+        Environment=HELLO_WORLD_MCP_URL=http://localhost:4001/api/mcp
+        """
       
       String.contains?(app_name_lower, "hello") ->
-        """
+        ~s"""
         Environment=ELIXIHUB_JWT_SECRET=your_elixihub_jwt_secret_here
-        Environment=ELIXIHUB_URL=http://localhost:4000"""
+        Environment=ELIXIHUB_URL=http://localhost:4000
+        """
       
       true ->
         "# No app-specific environment variables"
+    end
+  end
+
+  # Undeployment helper functions
+
+  defp execute_undeployment_steps([], results) do
+    {:ok, %{
+      steps_completed: Enum.reverse(results),
+      status: :completely_undeployed,
+      message: "Application successfully undeployed"
+    }}
+  end
+
+  defp execute_undeployment_steps([{step_name, step_fn} | remaining_steps], results) do
+    IO.puts("Executing undeployment step: #{step_name}")
+    
+    case step_fn.() do
+      {:ok, result} ->
+        IO.puts("Step '#{step_name}' succeeded: #{inspect(result)}")
+        step_result = %{step: step_name, status: :success, result: result}
+        execute_undeployment_steps(remaining_steps, [step_result | results])
+      
+      {:error, reason} ->
+        IO.puts("Step '#{step_name}' failed: #{inspect(reason)}")
+        step_result = %{step: step_name, status: :failed, error: reason}
+        # Continue with remaining steps even if one fails, but log the failure
+        execute_undeployment_steps(remaining_steps, [step_result | results])
+    end
+  end
+
+  defp disable_app_service(connection, service_name) do
+    case SSHClient.execute_command(connection, "sudo systemctl disable #{service_name}") do
+      {:ok, {_, _, 0}} ->
+        {:ok, :disabled}
+      
+      {:ok, {_, error, exit_code}} ->
+        # Don't fail if service doesn't exist or is already disabled
+        if String.contains?(error, "No such file") or String.contains?(error, "not found") do
+          {:ok, :already_disabled}
+        else
+          {:error, "Failed to disable service (exit #{exit_code}): #{error}"}
+        end
+      
+      {:error, reason} ->
+        {:error, "Failed to disable service: #{reason}"}
+    end
+  end
+
+  defp remove_service_file(connection, service_path) do
+    case SSHClient.execute_command(connection, "sudo rm -f #{service_path}") do
+      {:ok, {_, _, 0}} ->
+        {:ok, :removed}
+      
+      {:ok, {_, error, exit_code}} ->
+        {:error, "Failed to remove service file (exit #{exit_code}): #{error}"}
+      
+      {:error, reason} ->
+        {:error, "Failed to remove service file: #{reason}"}
+    end
+  end
+
+  defp reload_systemd(connection) do
+    case SSHClient.execute_command(connection, "sudo systemctl daemon-reload") do
+      {:ok, {_, _, 0}} ->
+        {:ok, :reloaded}
+      
+      {:ok, {_, error, exit_code}} ->
+        {:error, "Failed to reload systemd (exit #{exit_code}): #{error}"}
+      
+      {:error, reason} ->
+        {:error, "Failed to reload systemd: #{reason}"}
+    end
+  end
+
+  defp remove_app_files(connection, extract_path) do
+    case SSHClient.execute_command(connection, "rm -rf #{extract_path}") do
+      {:ok, {_, _, 0}} ->
+        {:ok, :removed}
+      
+      {:ok, {_, error, exit_code}} ->
+        # Don't fail if directory doesn't exist
+        if String.contains?(error, "No such file or directory") do
+          {:ok, :already_removed}
+        else
+          {:error, "Failed to remove app files (exit #{exit_code}): #{error}"}
+        end
+      
+      {:error, reason} ->
+        {:error, "Failed to remove app files: #{reason}"}
     end
   end
 end
