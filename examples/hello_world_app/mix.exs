@@ -9,7 +9,8 @@ defmodule HelloWorldApp.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      deps: deps()
+      deps: deps(),
+      releases: releases()
     ]
   end
 
@@ -72,6 +73,16 @@ defmodule HelloWorldApp.MixProject do
         "tailwind hello_world_app --minify",
         "esbuild hello_world_app --minify",
         "phx.digest"
+      ]
+    ]
+  end
+
+  # Configuration for releases
+  defp releases do
+    [
+      hello_world_app: [
+        include_executables_for: [:unix],
+        applications: [runtime_tools: :permanent]
       ]
     ]
   end

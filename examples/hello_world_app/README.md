@@ -33,20 +33,31 @@ The Hello World App demonstrates the following ElixiHub integration patterns:
 2. Elixir 1.14+
 3. Phoenix 1.7+
 
-### Installation
+### Development Setup
 
 ```bash
 # Navigate to the hello world app directory
 cd examples/hello_world_app
 
-# Install dependencies
-mix deps.get
+# Install dependencies and setup
+make setup
 
-# Start the application
-mix phx.server
+# Start the development server
+make dev
 ```
 
 The application will be available at http://localhost:4006
+
+### Building for Deployment
+
+To create a deployable package for ElixiHub:
+
+```bash
+# Create production build and deployment package
+make build
+```
+
+This creates a `hello_world_app-{version}.tar` file ready for deployment.
 
 ### Testing the Integration
 
@@ -252,50 +263,94 @@ Enable debug logging by setting log level in `config/dev.exs`:
 config :logger, level: :debug
 ```
 
-## Production Deployment
+## Deployment to ElixiHub
 
-### Docker Setup
+### Building for Deployment
 
-Example Dockerfile for the Hello World App:
+The Hello World App includes a complete build system for creating deployable packages:
 
-```dockerfile
-FROM hexpm/elixir:1.14-erlang-25-alpine
+```bash
+# Build production release and create tar package
+make build
 
-# Install build dependencies
-RUN apk add --no-cache build-base npm git
+# This creates: hello_world_app-{version}.tar
+```
 
-WORKDIR /app
+### Deployment Process
 
-# Install hex and rebar
-RUN mix local.hex --force && \
-    mix local.rebar --force
+1. **Build the Application**:
+   ```bash
+   cd examples/hello_world_app
+   make build
+   ```
 
-# Install dependencies
-COPY mix.exs mix.lock ./
-RUN mix deps.get
+2. **Deploy via ElixiHub**:
+   - Go to ElixiHub Admin → Applications → Deploy
+   - Select your configured host
+   - Upload the generated `.tar` file
+   - Set deployment path (e.g., `/opt/apps/hello_world_app`)
+   - Click Deploy
 
-# Copy application code
-COPY . .
+3. **Start the Service**:
+   ```bash
+   # ElixiHub automatically creates a systemd service
+   sudo systemctl start hello_world_app
+   sudo systemctl enable hello_world_app
+   ```
 
-# Compile application
-RUN mix compile
+### What's Included in the Build
 
-# Build assets
-RUN mix assets.deploy
+The deployment package includes:
+- **Production Release**: Optimized Elixir release
+- **Static Assets**: Compiled CSS/JS assets  
+- **Configuration Files**: Environment-specific configs
+- **Role Definitions**: App-specific roles (`roles.json`)
+- **Deployment Script**: Automated setup script
+- **Systemd Service**: Auto-generated service file
 
-EXPOSE 4006
+### Build Commands
 
-CMD ["mix", "phx.server"]
+```bash
+# Available make commands
+make help           # Show all available commands
+make build          # Build production release and create tar
+make deploy-package # Alias for build
+make dev            # Start development server
+make test           # Run tests
+make deps           # Install dependencies
+make clean          # Clean build artifacts
+make setup          # Development environment setup
 ```
 
 ### Environment Variables
 
-Set these environment variables for production:
+The deployment automatically handles these production settings:
 
 ```bash
-ELIXIHUB_BASE_URL=https://your-elixihub-instance.com
-SECRET_KEY_BASE=your-secret-key-base
-PORT=4006
+MIX_ENV=prod                    # Production environment
+PHX_SERVER=true                 # Start Phoenix server
+PORT=4006                       # Default port
+ELIXIHUB_BASE_URL=...          # Configure in runtime.exs
+```
+
+### Post-Deployment
+
+After deployment, the app will:
+1. **Auto-start** via systemd
+2. **Register roles** with ElixiHub (from roles.json)
+3. **Accept JWT tokens** from ElixiHub
+4. **Serve API endpoints** on the configured port
+
+Monitor the service:
+```bash
+# Check service status
+sudo systemctl status hello_world_app
+
+# View logs
+journalctl -u hello_world_app -f
+
+# Restart if needed
+sudo systemctl restart hello_world_app
 ```
 
 ## Contributing

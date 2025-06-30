@@ -313,6 +313,7 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
         module={ElixihubWeb.Admin.AppLive.DeploySimpleComponent}
         id={"deploy-#{@app.id}"}
         app={@app}
+        current_user={@current_user}
         patch={~p"/admin/apps"}
       />
     </.modal>
