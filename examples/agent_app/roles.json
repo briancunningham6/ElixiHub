@@ -1,0 +1,16 @@
+{
+  "roles": [
+    {
+      "name": "agent:user",
+      "description": "Basic agent user - can use chat interface and interact with AI assistant"
+    },
+    {
+      "name": "agent:admin", 
+      "description": "Agent administrator - can manage MCP connections and configure AI settings"
+    },
+    {
+      "name": "agent:api",
+      "description": "API access for agent - can use programmatic chat API"
+    }
+  ]
+}

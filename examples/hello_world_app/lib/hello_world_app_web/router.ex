@@ -19,6 +19,12 @@ defmodule HelloWorldAppWeb.Router do
     plug HelloWorldApp.Auth, :verify_jwt
   end
 
+  pipeline :mcp_api do
+    plug :accepts, ["json"]
+    plug HelloWorldAppWeb.MCPController, :capture_raw_body
+    plug HelloWorldApp.Auth, :verify_jwt
+  end
+
   scope "/", HelloWorldAppWeb do
     pipe_through :browser
 
@@ -52,5 +58,13 @@ defmodule HelloWorldAppWeb.Router do
     pipe_through [:authenticated_api]
 
     get "/features", ApiController, :app_specific
+  end
+
+  # MCP (Model Context Protocol) endpoints
+  scope "/mcp", HelloWorldAppWeb do
+    pipe_through :mcp_api
+
+    post "/", MCPController, :handle_request
+    get "/tools", MCPController, :tools
   end
 end
