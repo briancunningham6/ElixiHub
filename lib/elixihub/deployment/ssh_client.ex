@@ -205,12 +205,13 @@ defmodule Elixihub.Deployment.SSHClient do
         user_dir = config.private_key |> Path.dirname() |> String.to_charlist()
         [{:user_dir, user_dir} | base_opts]
       
-      Map.has_key?(config, :password) ->
+      Map.has_key?(config, :password) and config.password != "" ->
         password = String.to_charlist(config.password)
         [{:password, password} | base_opts]
       
       true ->
-        base_opts
+        # For connection tests without authentication, set auth_methods to none
+        [{:auth_methods, ['none']} | base_opts]
     end
   end
 

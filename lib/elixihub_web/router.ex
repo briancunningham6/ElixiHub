@@ -129,6 +129,7 @@ defmodule ElixihubWeb.Router do
     live "/admin/apps/deploy", Admin.AppLive.Index, :deploy_select
     live "/admin/apps/:id/edit", Admin.AppLive.Index, :edit
     live "/admin/apps/:id/deploy", Admin.AppLive.Index, :deploy
+    live "/admin/apps/:id/roles", Admin.AppLive.Roles, :show
   end
 
   scope "/", ElixihubWeb do

@@ -6,10 +6,46 @@ defmodule Elixihub.Deployment do
   import Ecto.Query, warn: false
   alias Elixihub.Repo
   alias Elixihub.Apps.App
-  alias Elixihub.Deployment.{SSHClient, TarHandler, AppInstaller}
+  alias Elixihub.Deployment.{SSHClient, TarHandler, AppInstaller, RoleParser}
 
   @doc """
   Deploys an application to a remote server via SSH.
+  
+  ## Parameters
+  - ssh_config: SSH configuration map
+  - tar_path: Path to the tar file to deploy  
+  - deploy_path: Remote path where app should be deployed
+  - app: The app being deployed
+  
+  ## Returns
+  - {:ok, deployment_log} on success
+  - {:error, reason} on failure
+  """
+  def deploy_app(ssh_config, tar_path, deploy_path, %App{} = app) when is_map(ssh_config) do
+    full_ssh_config = Map.put(ssh_config, :deploy_path, deploy_path)
+    
+    with {:ok, _} <- validate_tar_file(tar_path),
+         {:ok, _} <- validate_ssh_config(full_ssh_config),
+         {:ok, _} <- update_deployment_status(app, "deploying"),
+         {:ok, conn} <- SSHClient.connect(ssh_config),
+         {:ok, _} <- TarHandler.upload_and_extract(conn, tar_path, deploy_path),
+         {:ok, roles} <- RoleParser.extract_roles(conn, deploy_path),
+         {:ok, _} <- sync_app_roles(app, roles),
+         {:ok, result} <- AppInstaller.install_app(conn, app, deploy_path),
+         {:ok, _} <- SSHClient.disconnect(conn),
+         {:ok, _} <- update_deployment_status(app, "deployed") do
+      log_deployment_success(app, result)
+      {:ok, result}
+    else
+      {:error, reason} = error ->
+        update_deployment_status(app, "failed")
+        log_deployment_error(app, reason)
+        error
+    end
+  end
+
+  @doc """
+  Deploys an application to a remote server via SSH (legacy signature).
   
   ## Parameters
   - app: The app to deploy
@@ -32,6 +68,8 @@ defmodule Elixihub.Deployment do
          {:ok, _} <- update_deployment_status(app, "deploying"),
          {:ok, conn} <- SSHClient.connect(ssh_config),
          {:ok, _} <- TarHandler.upload_and_extract(conn, tar_path, ssh_config.deploy_path),
+         {:ok, roles} <- RoleParser.extract_roles(conn, ssh_config.deploy_path),
+         {:ok, _} <- sync_app_roles(app, roles),
          {:ok, result} <- AppInstaller.install_app(conn, app, ssh_config.deploy_path),
          {:ok, _} <- SSHClient.disconnect(conn),
          {:ok, _} <- update_deployment_status(app, "deployed") do
@@ -130,6 +168,17 @@ defmodule Elixihub.Deployment do
   end
 
   # Private functions
+
+  defp sync_app_roles(%App{} = app, roles) when is_list(roles) do
+    case Elixihub.Apps.sync_app_roles(app.id, roles) do
+      {:ok, _} -> 
+        add_deployment_log(app, "Synced #{length(roles)} role(s): #{Enum.map(roles, & &1.name) |> Enum.join(", ")}")
+        {:ok, :roles_synced}
+      {:error, reason} ->
+        add_deployment_log(app, "Failed to sync roles: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
 
   defp log_deployment_success(app, result) do
     add_deployment_log(app, "Deployment completed successfully: #{inspect(result)}")

@@ -7,6 +7,7 @@ defmodule Elixihub.Apps do
   alias Elixihub.Repo
 
   alias Elixihub.Apps.App
+  alias Elixihub.Apps.AppRole
 
   @doc """
   Returns the list of apps.
@@ -144,5 +145,89 @@ defmodule Elixihub.Apps do
   """
   def deactivate_app(%App{} = app) do
     update_app(app, %{status: "inactive"})
+  end
+
+  # App Role functions
+
+  @doc """
+  Returns the list of app roles for a specific app.
+  """
+  def list_app_roles(app_id) do
+    from(ar in AppRole, where: ar.app_id == ^app_id)
+    |> Repo.all()
+  end
+
+  @doc """
+  Gets a single app role.
+  """
+  def get_app_role!(id), do: Repo.get!(AppRole, id)
+
+  @doc """
+  Gets an app role by app and identifier.
+  """
+  def get_app_role_by_identifier(app_id, identifier) do
+    Repo.get_by(AppRole, app_id: app_id, identifier: identifier)
+  end
+
+  @doc """
+  Creates an app role.
+  """
+  def create_app_role(attrs \\ %{}) do
+    %AppRole{}
+    |> AppRole.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Updates an app role.
+  """
+  def update_app_role(%AppRole{} = app_role, attrs) do
+    app_role
+    |> AppRole.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Deletes an app role.
+  """
+  def delete_app_role(%AppRole{} = app_role) do
+    Repo.delete(app_role)
+  end
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for tracking app role changes.
+  """
+  def change_app_role(%AppRole{} = app_role, attrs \\ %{}) do
+    AppRole.changeset(app_role, attrs)
+  end
+
+  @doc """
+  Creates or updates app roles based on role definitions.
+  This is called during app installation.
+  """
+  def sync_app_roles(app_id, role_definitions) when is_list(role_definitions) do
+    Repo.transaction(fn ->
+      Enum.each(role_definitions, fn role_def ->
+        case get_app_role_by_identifier(app_id, role_def.identifier) do
+          nil ->
+            create_app_role(%{
+              app_id: app_id,
+              name: role_def.name,
+              description: role_def.description,
+              identifier: role_def.identifier,
+              permissions: role_def.permissions || %{},
+              metadata: role_def.metadata || %{}
+            })
+          
+          existing_role ->
+            update_app_role(existing_role, %{
+              name: role_def.name,
+              description: role_def.description,
+              permissions: role_def.permissions || %{},
+              metadata: role_def.metadata || %{}
+            })
+        end
+      end)
+    end)
   end
 end

@@ -69,20 +69,54 @@ defmodule Elixihub.Hosts do
   Tests SSH connectivity to a host.
   """
   def test_connection(%Host{} = host) do
+    # Try with ssh_hostname first
+    case try_connection_with_host(host.ssh_hostname, host) do
+      {:ok, message} -> 
+        {:ok, message}
+      {:error, reason} ->
+        # If hostname resolution fails, try with IP address
+        if String.contains?(reason, "nxdomain") or String.contains?(reason, "DNS resolution failed") do
+          case try_connection_with_host(host.ip_address, host) do
+            {:ok, message} -> {:ok, "#{message} (used IP address as fallback)"}
+            {:error, ip_reason} -> {:error, "Hostname failed: #{reason}, IP failed: #{ip_reason}"}
+          end
+        else
+          {:error, reason}
+        end
+    end
+  end
+
+  defp try_connection_with_host(hostname, %Host{} = host) do
+    # Use a minimal SSH config just to test connectivity
     ssh_config = %{
-      host: host.ssh_hostname,
+      host: hostname,
       port: host.ssh_port,
-      username: "test", # This would need actual username
-      password: host.ssh_password
+      username: "test", # Dummy username for connection test
+      timeout: 5000 # Short timeout for connection test
     }
 
     case Elixihub.Deployment.SSHClient.connect(ssh_config) do
       {:ok, conn} ->
         Elixihub.Deployment.SSHClient.disconnect(conn)
-        {:ok, "Connection successful"}
+        {:ok, "SSH port is reachable"}
       
       {:error, reason} ->
-        {:error, reason}
+        cond do
+          reason =~ "nxdomain" ->
+            {:error, "DNS resolution failed"}
+          reason =~ "authentication" or reason =~ "auth" ->
+            {:ok, "SSH port is reachable (authentication not tested)"}
+          reason =~ "connection refused" or reason =~ "econnrefused" ->
+            {:error, "Connection refused - SSH service may not be running"}
+          reason =~ "timeout" or reason =~ "etimedout" ->
+            {:error, "Connection timeout - host may be unreachable"}
+          reason =~ "host unreachable" or reason =~ "ehostunreach" ->
+            {:error, "Host unreachable"}
+          reason =~ "network unreachable" or reason =~ "enetunreach" ->
+            {:error, "Network unreachable"}
+          true ->
+            {:error, reason}
+        end
     end
   end
 

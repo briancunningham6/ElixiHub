@@ -275,4 +275,76 @@ defmodule Elixihub.Authorization do
     |> get_user_permissions()
     |> Enum.any?(&(&1.name == permission_name))
   end
+
+  # App Role functions
+
+  @doc """
+  Assigns an app role to a user.
+  """
+  def assign_app_role_to_user(user, app_role) do
+    alias Elixihub.Authorization.UserRole
+    
+    # Check if user already has this app role
+    existing = Repo.get_by(UserRole, user_id: user.id, app_role_id: app_role.id)
+    
+    if existing do
+      {:ok, user}
+    else
+      %UserRole{}
+      |> UserRole.changeset(%{user_id: user.id, app_role_id: app_role.id})
+      |> Repo.insert()
+      |> case do
+        {:ok, _user_role} -> {:ok, user}
+        error -> error
+      end
+    end
+  end
+
+  @doc """
+  Removes an app role from a user.
+  """
+  def remove_app_role_from_user(user, app_role) do
+    alias Elixihub.Authorization.UserRole
+    
+    case Repo.get_by(UserRole, user_id: user.id, app_role_id: app_role.id) do
+      nil -> {:ok, user}
+      user_role -> 
+        case Repo.delete(user_role) do
+          {:ok, _} -> {:ok, user}
+          error -> error
+        end
+    end
+  end
+
+  @doc """
+  Gets all app roles for a user.
+  """
+  def get_user_app_roles(%User{} = user) do
+    alias Elixihub.Authorization.UserRole
+    alias Elixihub.Apps.AppRole
+    
+    from(ur in UserRole,
+      join: ar in AppRole, on: ur.app_role_id == ar.id,
+      where: ur.user_id == ^user.id and not is_nil(ur.app_role_id),
+      select: ar,
+      preload: [:app]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Checks if a user has a specific app role.
+  """
+  def user_has_app_role?(%User{} = user, app_role_identifier, app_id) do
+    alias Elixihub.Authorization.UserRole
+    alias Elixihub.Apps.AppRole
+    
+    query = from ur in UserRole,
+      join: ar in AppRole, on: ur.app_role_id == ar.id,
+      where: ur.user_id == ^user.id and 
+             ar.identifier == ^app_role_identifier and 
+             ar.app_id == ^app_id
+    
+    Repo.exists?(query)
+  end
 end

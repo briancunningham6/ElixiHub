@@ -23,6 +23,7 @@ defmodule Elixihub.Apps.App do
     
     belongs_to :node, Elixihub.Nodes.Node
     belongs_to :host, Elixihub.Hosts.Host
+    has_many :app_roles, Elixihub.Apps.AppRole
 
     timestamps(type: :utc_datetime)
   end

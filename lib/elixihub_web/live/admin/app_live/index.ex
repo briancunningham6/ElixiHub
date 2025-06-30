@@ -239,6 +239,13 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
                   </.link>
                   
                   <.link
+                    navigate={~p"/admin/apps/#{app}/roles"}
+                    class="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                  >
+                    Roles
+                  </.link>
+                  
+                  <.link
                     patch={~p"/admin/apps/#{app}/edit"}
                     class="text-blue-600 hover:text-blue-900 text-sm font-medium"
                   >

@@ -1,0 +1,48 @@
+{
+  "roles": [
+    {
+      "identifier": "admin",
+      "name": "Administrator",
+      "description": "Full access to all hello world app features",
+      "permissions": {
+        "read": true,
+        "write": true,
+        "delete": true,
+        "manage_users": true
+      },
+      "metadata": {
+        "level": "high",
+        "department": "IT"
+      }
+    },
+    {
+      "identifier": "user",
+      "name": "Standard User", 
+      "description": "Basic access to hello world app",
+      "permissions": {
+        "read": true,
+        "write": false,
+        "delete": false,
+        "manage_users": false
+      },
+      "metadata": {
+        "level": "basic",
+        "department": "general"
+      }
+    },
+    {
+      "identifier": "viewer",
+      "name": "Viewer",
+      "description": "Read-only access to hello world app",
+      "permissions": {
+        "read": true,
+        "write": false,
+        "delete": false,
+        "manage_users": false
+      },
+      "metadata": {
+        "level": "minimal"
+      }
+    }
+  ]
+}
