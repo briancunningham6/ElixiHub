@@ -13,7 +13,11 @@ defmodule AgentApp.MCPManager do
   end
 
   def init(_opts) do
-    servers = Application.get_env(:agent_app, :mcp)[:servers] || []
+    mcp_config = Application.get_env(:agent_app, :mcp)
+    servers = (mcp_config && mcp_config[:servers]) || []
+    
+    Logger.info("MCPManager initializing with config: #{inspect(mcp_config)}")
+    Logger.info("Found #{length(servers)} configured servers: #{inspect(servers)}")
     
     state = %__MODULE__{
       servers: servers,
@@ -54,18 +58,32 @@ defmodule AgentApp.MCPManager do
   end
 
   def handle_call(:list_available_tools, _from, state) do
-    tools = Enum.flat_map(state.connections, fn {server_name, connection} ->
-      case get_server_tools(connection) do
-        {:ok, server_tools} ->
-          Enum.map(server_tools, fn tool ->
-            Map.put(tool, :server, server_name)
-          end)
+    Logger.info("Listing available tools from #{map_size(state.connections)} connections")
+    
+    tools = try do
+      Enum.flat_map(state.connections, fn {server_name, connection} ->
+        Logger.info("Getting tools from server: #{server_name} with connection: #{inspect(connection)}")
         
-        {:error, _} ->
-          []
-      end
-    end)
+        case get_server_tools(connection) do
+          {:ok, server_tools} ->
+            Logger.info("Got #{length(server_tools)} tools from #{server_name}")
+            Enum.map(server_tools, fn tool ->
+              Map.put(tool, :server, server_name)
+            end)
+          
+          {:error, reason} ->
+            Logger.warning("Failed to get tools from #{server_name}: #{inspect(reason)}")
+            []
+        end
+      end)
+    rescue
+      error ->
+        Logger.error("Error in list_available_tools: #{inspect(error)}")
+        Logger.error("Stacktrace: #{inspect(__STACKTRACE__)}")
+        []
+    end
 
+    Logger.info("Returning #{length(tools)} total tools")
     {:reply, {:ok, tools}, state}
   end
 
@@ -82,14 +100,37 @@ defmodule AgentApp.MCPManager do
   # Private functions
 
   defp connect_to_server(server) do
-    # For now, we'll simulate the connection. In a real implementation,
-    # this would establish an HTTP or WebSocket connection to the MCP server
-    {:ok, %{
-      name: server.name,
-      url: server.url,
-      description: server.description,
-      connected_at: DateTime.utc_now()
-    }}
+    # Validate server configuration
+    case validate_server_config(server) do
+      :ok ->
+        # For now, we'll simulate the connection. In a real implementation,
+        # this would establish an HTTP or WebSocket connection to the MCP server
+        {:ok, %{
+          name: server.name,
+          url: server.url,
+          description: server.description,
+          connected_at: DateTime.utc_now()
+        }}
+      
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+  
+  defp validate_server_config(server) do
+    cond do
+      is_nil(server.url) or server.url == "" ->
+        {:error, "Server URL is empty or nil"}
+      
+      not String.starts_with?(server.url, "http") ->
+        {:error, "Server URL must start with http:// or https://"}
+      
+      String.contains?(server.url, "your_") ->
+        {:error, "Server URL appears to be a placeholder value"}
+      
+      true ->
+        :ok
+    end
   end
 
   defp call_mcp_tool(connection, tool_name, params, user_context) do
@@ -133,36 +174,53 @@ defmodule AgentApp.MCPManager do
   end
 
   defp get_server_tools(connection) do
-    # Get available tools from the MCP server
-    request_body = %{
-      jsonrpc: "2.0",
-      id: generate_request_id(),
-      method: "tools/list"
-    }
-
-    headers = [
-      {"Content-Type", "application/json"},
-      {"User-Agent", "AgentApp/1.0"}
-    ]
-
-    case HTTPoison.post(connection.url, Jason.encode!(request_body), headers, recv_timeout: 10_000) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
-        case Jason.decode(body) do
-          {:ok, %{"result" => %{"tools" => tools}}} ->
-            {:ok, tools}
-          
-          {:ok, %{"error" => error}} ->
-            {:error, error}
-          
-          {:error, decode_error} ->
-            {:error, {:decode_error, decode_error}}
-        end
+    # Validate connection before making request
+    if is_nil(connection.url) or connection.url == "" do
+      Logger.warning("Cannot get tools from server #{connection.name}: URL is empty")
+      {:error, :empty_url}
+    else
+      Logger.info("Getting tools from MCP server: #{connection.name} at #{connection.url}")
       
-      {:ok, %HTTPoison.Response{status_code: status_code, body: body}} ->
-        {:error, {:http_error, status_code, body}}
-      
-      {:error, %HTTPoison.Error{reason: reason}} ->
-        {:error, {:connection_error, reason}}
+      # Get available tools from the MCP server
+      request_body = %{
+        jsonrpc: "2.0",
+        id: generate_request_id(),
+        method: "tools/list"
+      }
+
+      headers = [
+        {"Content-Type", "application/json"},
+        {"User-Agent", "AgentApp/1.0"}
+      ]
+
+      case HTTPoison.post(connection.url, Jason.encode!(request_body), headers, recv_timeout: 10_000) do
+        {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+          case Jason.decode(body) do
+            {:ok, %{"result" => %{"tools" => tools}}} ->
+              Logger.info("Successfully received #{length(tools)} tools from #{connection.name}")
+              {:ok, tools}
+            
+            {:ok, %{"error" => error}} ->
+              Logger.warning("MCP server #{connection.name} returned error: #{inspect(error)}")
+              {:error, error}
+            
+            {:error, decode_error} ->
+              Logger.warning("Failed to decode response from #{connection.name}: #{inspect(decode_error)}")
+              {:error, {:decode_error, decode_error}}
+          end
+        
+        {:ok, %HTTPoison.Response{status_code: status_code, body: body}} ->
+          Logger.warning("HTTP error from #{connection.name}: #{status_code} - #{body}")
+          {:error, {:http_error, status_code, body}}
+        
+        {:error, %HTTPoison.Error{reason: reason}} ->
+          Logger.warning("Connection error to #{connection.name}: #{inspect(reason)}")
+          {:error, {:connection_error, reason}}
+        
+        {:error, other} ->
+          Logger.warning("Unexpected error calling #{connection.name}: #{inspect(other)}")
+          {:error, {:unexpected_error, other}}
+      end
     end
   end
 

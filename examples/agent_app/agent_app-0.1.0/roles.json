@@ -1,0 +1,12 @@
+{
+  "roles": [
+    {
+      "name": "agent:user",
+      "description": "Basic agent user - can use chat interface"
+    },
+    {
+      "name": "agent:admin", 
+      "description": "Agent administrator - can manage MCP connections"
+    }
+  ]
+}

@@ -5,6 +5,7 @@ defmodule Elixihub.Deployment.SSHClient do
 
   @default_port 22
   @default_timeout 30_000
+  @deployment_timeout 600_000  # 10 minutes for deployment operations
 
   @doc """
   Connects to a remote server via SSH.
@@ -76,7 +77,7 @@ defmodule Elixihub.Deployment.SSHClient do
       {:ok, channel} ->
         case :ssh_connection.exec(connection, channel, command_charlist, timeout) do
           :success ->
-            result = collect_response(connection, channel, "", "", nil)
+            result = collect_response(connection, channel, "", "", nil, timeout)
             :ssh_connection.close(connection, channel)
             result
           
@@ -88,6 +89,14 @@ defmodule Elixihub.Deployment.SSHClient do
       {:error, reason} ->
         {:error, "Failed to open SSH channel: #{inspect(reason)}"}
     end
+  end
+
+  @doc """
+  Executes a deployment command with extended timeout (10 minutes).
+  """
+  def execute_deployment_command(connection, command, opts \\ []) do
+    deployment_timeout = Keyword.get(opts, :timeout, @deployment_timeout)
+    execute_command(connection, command, [timeout: deployment_timeout])
   end
 
   @doc """
@@ -222,22 +231,22 @@ defmodule Elixihub.Deployment.SSHClient do
     end
   end
 
-  defp collect_response(connection, channel, stdout, stderr, exit_code) do
+  defp collect_response(connection, channel, stdout, stderr, exit_code, timeout \\ @default_timeout) do
     receive do
       {:ssh_cm, ^connection, {:data, ^channel, 0, data}} ->
-        collect_response(connection, channel, stdout <> to_string(data), stderr, exit_code)
+        collect_response(connection, channel, stdout <> to_string(data), stderr, exit_code, timeout)
       
       {:ssh_cm, ^connection, {:data, ^channel, 1, data}} ->
-        collect_response(connection, channel, stdout, stderr <> to_string(data), exit_code)
+        collect_response(connection, channel, stdout, stderr <> to_string(data), exit_code, timeout)
       
       {:ssh_cm, ^connection, {:exit_status, ^channel, status}} ->
-        collect_response(connection, channel, stdout, stderr, status)
+        collect_response(connection, channel, stdout, stderr, status, timeout)
       
       {:ssh_cm, ^connection, {:closed, ^channel}} ->
         {:ok, {stdout, stderr, exit_code || 0}}
     after
-      30_000 ->
-        {:error, "Command execution timeout"}
+      timeout ->
+        {:error, "Command execution timeout after #{timeout}ms"}
     end
   end
 

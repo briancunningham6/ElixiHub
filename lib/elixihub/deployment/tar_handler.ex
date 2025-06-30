@@ -137,30 +137,21 @@ defmodule Elixihub.Deployment.TarHandler do
   end
 
   defp extract_tar_file(connection, remote_tar_path, remote_deploy_path) do
-    extract_path = Path.join(remote_deploy_path, "app")
+    # Extract directly to the deploy path, not to a subdirectory
+    extract_path = remote_deploy_path
     
-    # Create extraction directory
-    case SSHClient.create_directory(connection, extract_path) do
+    # Extract the tar file directly to the deploy directory
+    extract_command = build_extract_command(remote_tar_path, extract_path)
+    
+    case SSHClient.execute_command(connection, extract_command) do
       {:ok, {_, _, 0}} ->
-        # Extract the tar file
-        extract_command = build_extract_command(remote_tar_path, extract_path)
-        
-        case SSHClient.execute_command(connection, extract_command) do
-          {:ok, {_, _, 0}} ->
-            {:ok, extract_path}
-          
-          {:ok, {_, error, exit_code}} ->
-            {:error, "Failed to extract tar file (exit #{exit_code}): #{error}"}
-          
-          {:error, reason} ->
-            {:error, "Failed to extract tar file: #{reason}"}
-        end
+        {:ok, extract_path}
       
       {:ok, {_, error, exit_code}} ->
-        {:error, "Failed to create extraction directory (exit #{exit_code}): #{error}"}
+        {:error, "Failed to extract tar file (exit #{exit_code}): #{error}"}
       
       {:error, reason} ->
-        {:error, "Failed to create extraction directory: #{reason}"}
+        {:error, "Failed to extract tar file: #{reason}"}
     end
   end
 

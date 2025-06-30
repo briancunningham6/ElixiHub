@@ -154,72 +154,223 @@ defmodule Elixihub.Deployment.AppInstaller do
   end
 
   defp install_elixir_app(connection, extract_path, app) do
-    commands = [
-      "cd #{extract_path}",
-      "mix local.hex --force",
-      "mix local.rebar --force",
-      "mix deps.get --only prod",
-      "MIX_ENV=prod mix compile",
-      "MIX_ENV=prod mix assets.deploy 2>/dev/null || echo 'No assets to deploy'",
-      "MIX_ENV=prod mix release --overwrite"
-    ]
+    # Always build on target architecture to avoid exec format errors
+    try_elixir_installation_on_target(connection, extract_path)
+  end
+  
+  defp try_elixir_installation_primary(connection, extract_path) do
+    # Primary method with network optimizations
+    combined_command = """
+    cd #{extract_path} && \
+    git config --global http.lowSpeedLimit 1000 && \
+    git config --global http.lowSpeedTime 300 && \
+    git config --global http.postBuffer 524288000 && \
+    export HEX_HTTP_TIMEOUT=300 && \
+    export HEX_HTTP_CONCURRENCY=1 && \
+    mix local.hex --force && \
+    mix local.rebar --force && \
+    timeout 600 mix deps.get --only prod && \
+    MIX_ENV=prod mix compile && \
+    (MIX_ENV=prod mix assets.deploy 2>/dev/null || echo 'No assets to deploy') && \
+    MIX_ENV=prod mix release --overwrite
+    """
     
-    execute_commands_sequence(connection, commands)
+    case SSHClient.execute_deployment_command(connection, combined_command) do
+      {:ok, {stdout, stderr, 0}} ->
+        {:ok, [%{
+          command: "elixir_build_sequence_primary",
+          stdout: stdout,
+          stderr: stderr,
+          exit_code: 0,
+          success: true
+        }]}
+      
+      {:ok, {stdout, stderr, exit_code}} ->
+        {:error, "Primary build failed (exit #{exit_code}): #{stderr}"}
+      
+      {:error, reason} ->
+        {:error, "Primary build failed: #{inspect(reason)}"}
+    end
+  end
+  
+  defp try_elixir_installation_on_target(connection, extract_path) do
+    # Build release on target architecture to avoid exec format errors
+    combined_command = """
+    cd #{extract_path} && \
+    echo 'Building release on target architecture...' && \
+    git config --global http.lowSpeedLimit 1000 && \
+    git config --global http.lowSpeedTime 300 && \
+    git config --global http.postBuffer 524288000 && \
+    export HEX_HTTP_TIMEOUT=300 && \
+    export HEX_HTTP_CONCURRENCY=1 && \
+    mix local.hex --force && \
+    mix local.rebar --force && \
+    timeout 600 mix deps.get --only prod && \
+    MIX_ENV=prod mix compile && \
+    (MIX_ENV=prod mix assets.deploy 2>/dev/null || echo 'No assets to deploy') && \
+    MIX_ENV=prod mix release --overwrite && \
+    echo 'Release built successfully on target architecture'
+    """
+    
+    case SSHClient.execute_deployment_command(connection, combined_command) do
+      {:ok, {stdout, stderr, 0}} ->
+        {:ok, [%{
+          command: "elixir_build_on_target",
+          stdout: stdout,
+          stderr: stderr,
+          exit_code: 0,
+          success: true
+        }]}
+      
+      {:ok, {stdout, stderr, exit_code}} ->
+        {:error, "Commands failed: [%{command: \"elixir_build_on_target\", stdout: \"#{stdout}\", stderr: \"#{stderr}\", success: false, exit_code: #{exit_code}}]"}
+      
+      {:error, reason} ->
+        {:error, "Commands failed: [%{command: \"elixir_build_on_target\", error: #{inspect(reason)}, success: false}]"}
+    end
   end
 
   defp install_node_app(connection, extract_path, app) do
-    commands = [
-      "cd #{extract_path}",
-      "npm ci --only=production",
-      "npm run build 2>/dev/null || echo 'No build script found'"
-    ]
+    combined_command = """
+    cd #{extract_path} && \
+    npm ci --only=production && \
+    (npm run build 2>/dev/null || echo 'No build script found')
+    """
     
-    execute_commands_sequence(connection, commands)
+    case SSHClient.execute_deployment_command(connection, combined_command) do
+      {:ok, {stdout, stderr, 0}} ->
+        {:ok, [%{
+          command: "node_build_sequence",
+          stdout: stdout,
+          stderr: stderr,
+          exit_code: 0,
+          success: true
+        }]}
+      
+      {:ok, {stdout, stderr, exit_code}} ->
+        {:error, "Commands failed: [%{command: \"node_build_sequence\", stdout: \"#{stdout}\", stderr: \"#{stderr}\", success: false, exit_code: #{exit_code}}]"}
+      
+      {:error, reason} ->
+        {:error, "Commands failed: [%{command: \"node_build_sequence\", error: #{inspect(reason)}, success: false}]"}
+    end
   end
 
   defp install_python_app(connection, extract_path, app) do
-    commands = [
-      "cd #{extract_path}",
-      "python3 -m venv venv",
-      "source venv/bin/activate",
-      "pip install -r requirements.txt"
-    ]
+    combined_command = """
+    cd #{extract_path} && \
+    python3 -m venv venv && \
+    source venv/bin/activate && \
+    pip install -r requirements.txt
+    """
     
-    execute_commands_sequence(connection, commands)
+    case SSHClient.execute_deployment_command(connection, combined_command) do
+      {:ok, {stdout, stderr, 0}} ->
+        {:ok, [%{
+          command: "python_build_sequence",
+          stdout: stdout,
+          stderr: stderr,
+          exit_code: 0,
+          success: true
+        }]}
+      
+      {:ok, {stdout, stderr, exit_code}} ->
+        {:error, "Commands failed: [%{command: \"python_build_sequence\", stdout: \"#{stdout}\", stderr: \"#{stderr}\", success: false, exit_code: #{exit_code}}]"}
+      
+      {:error, reason} ->
+        {:error, "Commands failed: [%{command: \"python_build_sequence\", error: #{inspect(reason)}, success: false}]"}
+    end
   end
 
   defp install_ruby_app(connection, extract_path, app) do
-    commands = [
-      "cd #{extract_path}",
-      "bundle install --deployment --without development test"
-    ]
+    combined_command = """
+    cd #{extract_path} && \
+    bundle install --deployment --without development test
+    """
     
-    execute_commands_sequence(connection, commands)
+    case SSHClient.execute_deployment_command(connection, combined_command) do
+      {:ok, {stdout, stderr, 0}} ->
+        {:ok, [%{
+          command: "ruby_build_sequence",
+          stdout: stdout,
+          stderr: stderr,
+          exit_code: 0,
+          success: true
+        }]}
+      
+      {:ok, {stdout, stderr, exit_code}} ->
+        {:error, "Commands failed: [%{command: \"ruby_build_sequence\", stdout: \"#{stdout}\", stderr: \"#{stderr}\", success: false, exit_code: #{exit_code}}]"}
+      
+      {:error, reason} ->
+        {:error, "Commands failed: [%{command: \"ruby_build_sequence\", error: #{inspect(reason)}, success: false}]"}
+    end
   end
 
   defp install_go_app(connection, extract_path, app) do
-    commands = [
-      "cd #{extract_path}",
-      "go mod download",
-      "go build -o app ."
-    ]
+    combined_command = """
+    cd #{extract_path} && \
+    go mod download && \
+    go build -o app .
+    """
     
-    execute_commands_sequence(connection, commands)
+    case SSHClient.execute_deployment_command(connection, combined_command) do
+      {:ok, {stdout, stderr, 0}} ->
+        {:ok, [%{
+          command: "go_build_sequence",
+          stdout: stdout,
+          stderr: stderr,
+          exit_code: 0,
+          success: true
+        }]}
+      
+      {:ok, {stdout, stderr, exit_code}} ->
+        {:error, "Commands failed: [%{command: \"go_build_sequence\", stdout: \"#{stdout}\", stderr: \"#{stderr}\", success: false, exit_code: #{exit_code}}]"}
+      
+      {:error, reason} ->
+        {:error, "Commands failed: [%{command: \"go_build_sequence\", error: #{inspect(reason)}, success: false}]"}
+    end
   end
 
   defp install_java_app(connection, extract_path, app) do
     cond do
       SSHClient.path_exists?(connection, Path.join(extract_path, "pom.xml")) ->
-        execute_commands_sequence(connection, [
-          "cd #{extract_path}",
-          "mvn clean package -DskipTests"
-        ])
+        combined_command = "cd #{extract_path} && mvn clean package -DskipTests"
+        
+        case SSHClient.execute_deployment_command(connection, combined_command) do
+          {:ok, {stdout, stderr, 0}} ->
+            {:ok, [%{
+              command: "maven_build_sequence",
+              stdout: stdout,
+              stderr: stderr,
+              exit_code: 0,
+              success: true
+            }]}
+          
+          {:ok, {stdout, stderr, exit_code}} ->
+            {:error, "Commands failed: [%{command: \"maven_build_sequence\", stdout: \"#{stdout}\", stderr: \"#{stderr}\", success: false, exit_code: #{exit_code}}]"}
+          
+          {:error, reason} ->
+            {:error, "Commands failed: [%{command: \"maven_build_sequence\", error: #{inspect(reason)}, success: false}]"}
+        end
       
       SSHClient.path_exists?(connection, Path.join(extract_path, "build.gradle")) ->
-        execute_commands_sequence(connection, [
-          "cd #{extract_path}",
-          "./gradlew build -x test"
-        ])
+        combined_command = "cd #{extract_path} && ./gradlew build -x test"
+        
+        case SSHClient.execute_deployment_command(connection, combined_command) do
+          {:ok, {stdout, stderr, 0}} ->
+            {:ok, [%{
+              command: "gradle_build_sequence",
+              stdout: stdout,
+              stderr: stderr,
+              exit_code: 0,
+              success: true
+            }]}
+          
+          {:ok, {stdout, stderr, exit_code}} ->
+            {:error, "Commands failed: [%{command: \"gradle_build_sequence\", stdout: \"#{stdout}\", stderr: \"#{stderr}\", success: false, exit_code: #{exit_code}}]"}
+          
+          {:error, reason} ->
+            {:error, "Commands failed: [%{command: \"gradle_build_sequence\", error: #{inspect(reason)}, success: false}]"}
+        end
       
       true ->
         {:error, "No supported Java build file found"}
@@ -227,12 +378,27 @@ defmodule Elixihub.Deployment.AppInstaller do
   end
 
   defp install_php_app(connection, extract_path, app) do
-    commands = [
-      "cd #{extract_path}",
-      "composer install --no-dev --optimize-autoloader"
-    ]
+    combined_command = """
+    cd #{extract_path} && \
+    composer install --no-dev --optimize-autoloader
+    """
     
-    execute_commands_sequence(connection, commands)
+    case SSHClient.execute_deployment_command(connection, combined_command) do
+      {:ok, {stdout, stderr, 0}} ->
+        {:ok, [%{
+          command: "php_build_sequence",
+          stdout: stdout,
+          stderr: stderr,
+          exit_code: 0,
+          success: true
+        }]}
+      
+      {:ok, {stdout, stderr, exit_code}} ->
+        {:error, "Commands failed: [%{command: \"php_build_sequence\", stdout: \"#{stdout}\", stderr: \"#{stderr}\", success: false, exit_code: #{exit_code}}]"}
+      
+      {:error, reason} ->
+        {:error, "Commands failed: [%{command: \"php_build_sequence\", error: #{inspect(reason)}, success: false}]"}
+    end
   end
 
   defp install_generic_app(connection, extract_path, app) do
@@ -240,13 +406,36 @@ defmodule Elixihub.Deployment.AppInstaller do
     install_script_path = Path.join(extract_path, "install.sh")
     
     if SSHClient.path_exists?(connection, install_script_path) do
-      execute_commands_sequence(connection, [
-        "cd #{extract_path}",
-        "chmod +x install.sh",
-        "./install.sh"
-      ])
+      combined_command = """
+      cd #{extract_path} && \
+      chmod +x install.sh && \
+      ./install.sh
+      """
+      
+      case SSHClient.execute_deployment_command(connection, combined_command) do
+        {:ok, {stdout, stderr, 0}} ->
+          {:ok, [%{
+            command: "generic_install_sequence",
+            stdout: stdout,
+            stderr: stderr,
+            exit_code: 0,
+            success: true
+          }]}
+        
+        {:ok, {stdout, stderr, exit_code}} ->
+          {:error, "Commands failed: [%{command: \"generic_install_sequence\", stdout: \"#{stdout}\", stderr: \"#{stderr}\", success: false, exit_code: #{exit_code}}]"}
+        
+        {:error, reason} ->
+          {:error, "Commands failed: [%{command: \"generic_install_sequence\", error: #{inspect(reason)}, success: false}]"}
+      end
     else
-      {:ok, "Generic app deployed - no installation script found"}
+      {:ok, [%{
+        command: "generic_app_skip",
+        stdout: "Generic app deployed - no installation script found",
+        stderr: "",
+        exit_code: 0,
+        success: true
+      }]}
     end
   end
 
@@ -369,6 +558,9 @@ defmodule Elixihub.Deployment.AppInstaller do
     # Get the username from SSH config (the user deploying the app)
     deploy_user = get_deploy_user(connection)
     
+    # Generate a default SECRET_KEY_BASE if not provided
+    secret_key_base = generate_secret_key_base()
+    
     """
     [Unit]
     Description=ElixiHub App: #{app.name}
@@ -389,6 +581,12 @@ defmodule Elixihub.Deployment.AppInstaller do
     Environment=PHX_SERVER=true
     Environment=HOME=#{extract_path}
     Environment=RELEASE_COOKIE=elixihub-#{service_name}
+    Environment=SECRET_KEY_BASE=#{secret_key_base}
+    Environment=PHX_HOST=localhost
+    Environment=OPENAI_API_KEY=your_openai_api_key_here
+    Environment=ELIXIHUB_JWT_SECRET=your_elixihub_jwt_secret_here
+    Environment=ELIXIHUB_URL=http://localhost:4000
+    Environment=HELLO_WORLD_MCP_URL=http://localhost:4001/api/mcp
     StandardOutput=journal
     StandardError=journal
     SyslogIdentifier=#{service_name}
@@ -426,64 +624,98 @@ defmodule Elixihub.Deployment.AppInstaller do
     
     cond do
       SSHClient.path_exists?(connection, Path.join(extract_path, "_build/prod/rel")) ->
-        # Elixir release built with mix release
-        release_name = extract_path |> Path.basename()
-        command = "#{extract_path}/_build/prod/rel/#{release_name}/bin/#{release_name} start"
-        IO.puts("Detected Elixir release with _build: #{command}")
-        command
+        # Elixir release built with mix release - find the actual app name
+        case SSHClient.execute_command(connection, "ls #{extract_path}/_build/prod/rel/") do
+          {:ok, {output, _, 0}} ->
+            app_dirs = output |> String.trim() |> String.split("\n") |> Enum.reject(&(&1 == ""))
+            IO.puts("Found release directories: #{inspect(app_dirs)}")
+            
+            case app_dirs do
+              [app_name | _] ->
+                command = "#{extract_path}/_build/prod/rel/#{String.trim(app_name)}/bin/#{String.trim(app_name)} start"
+                IO.puts("Detected Elixir release with _build: #{command}")
+                command
+              [] ->
+                # Fallback to directory name
+                release_name = extract_path |> Path.basename()
+                command = "#{extract_path}/_build/prod/rel/#{release_name}/bin/#{release_name} start"
+                IO.puts("Using directory name for release: #{command}")
+                command
+            end
+          _ ->
+            release_name = extract_path |> Path.basename()
+            command = "#{extract_path}/_build/prod/rel/#{release_name}/bin/#{release_name} start"
+            IO.puts("Could not list release dirs, using directory name: #{command}")
+            command
+        end
       
       SSHClient.path_exists?(connection, Path.join(extract_path, "bin")) ->
         # Elixir release in bin directory - find the actual executable
-        release_name = extract_path |> Path.basename()
-        IO.puts("Release name from path basename: #{release_name}")
+        IO.puts("Found bin directory, detecting executable...")
         
-        # First, check if the expected executable name exists
-        potential_executable = Path.join(extract_path, "bin/#{release_name}")
-        IO.puts("Checking for potential executable: #{potential_executable}")
-        
-        if SSHClient.path_exists?(connection, potential_executable) do
-          command = "#{potential_executable} start"
-          IO.puts("Detected Elixir release in bin: #{command}")
-          command
-        else
-          IO.puts("Expected executable #{potential_executable} not found, searching for alternatives...")
-          
-          # Try common Elixir app names
-          common_names = ["hello_world_app", "hello", release_name]
-          found_executable = Enum.find(common_names, fn name ->
-            exe_path = Path.join(extract_path, "bin/#{name}")
-            IO.puts("Checking for: #{exe_path}")
-            SSHClient.path_exists?(connection, exe_path)
-          end)
-          
-          if found_executable do
-            command = "#{extract_path}/bin/#{found_executable} start"
-            IO.puts("Found executable by name: #{command}")
-            command
-          else
-            # Find any executable file in bin directory
-            case SSHClient.execute_command(connection, "find #{extract_path}/bin -type f -executable") do
-              {:ok, {output, _, 0}} ->
-                executables = output |> String.trim() |> String.split("\n") |> Enum.reject(&(&1 == ""))
-                IO.puts("Found executables in bin: #{inspect(executables)}")
-                
-                case executables do
-                  [first_executable | _] ->
-                    command = "#{first_executable} start"
-                    IO.puts("Using first executable found: #{command}")
-                    command
-                  [] ->
-                    # Fallback to expected name
-                    command = "#{extract_path}/bin/#{release_name} start"
-                    IO.puts("No executables found, using release name: #{command}")
+        # Find all executable files in bin directory, excluding .bat files
+        case SSHClient.execute_command(connection, "find #{extract_path}/bin -type f -executable -not -name '*.bat'") do
+          {:ok, {output, _, 0}} ->
+            executables = output |> String.trim() |> String.split("\n") |> Enum.reject(&(&1 == "" or String.ends_with?(&1, ".bat")))
+            IO.puts("Found non-.bat executables in bin: #{inspect(executables)}")
+            
+            case executables do
+              [first_executable | _] ->
+                command = "#{first_executable} start"
+                IO.puts("Using first executable found: #{command}")
+                command
+              [] ->
+                # Try to detect from directory listing
+                case SSHClient.execute_command(connection, "ls -la #{extract_path}/bin/") do
+                  {:ok, {listing, _, 0}} ->
+                    IO.puts("Bin directory listing:\n#{listing}")
+                    
+                    # Extract executable names from listing (exclude .bat files)
+                    potential_names = listing
+                    |> String.split("\n")
+                    |> Enum.filter(&(String.contains?(&1, "-rwxr-xr-x") and not String.ends_with?(&1, ".bat")))
+                    |> Enum.map(&(String.split(&1) |> List.last()))
+                    |> Enum.reject(&is_nil/1)
+                    
+                    IO.puts("Potential executable names from listing: #{inspect(potential_names)}")
+                    
+                    case potential_names do
+                      [name | _] ->
+                        command = "#{extract_path}/bin/#{name} start"
+                        IO.puts("Using executable from listing: #{command}")
+                        command
+                      [] ->
+                        # Last resort: try common patterns
+                        release_name = extract_path |> Path.basename()
+                        common_names = ["#{release_name}_app", "agent_app", "hello_world_app", release_name]
+                        
+                        found_executable = Enum.find(common_names, fn name ->
+                          exe_path = Path.join(extract_path, "bin/#{name}")
+                          IO.puts("Checking for common name: #{exe_path}")
+                          SSHClient.path_exists?(connection, exe_path)
+                        end)
+                        
+                        if found_executable do
+                          command = "#{extract_path}/bin/#{found_executable} start"
+                          IO.puts("Found executable by common name: #{command}")
+                          command
+                        else
+                          # Final fallback
+                          command = "#{extract_path}/bin/start"
+                          IO.puts("Using final fallback: #{command}")
+                          command
+                        end
+                    end
+                  _ ->
+                    command = "#{extract_path}/bin/start"
+                    IO.puts("Could not list bin directory, using fallback: #{command}")
                     command
                 end
-              _ ->
-                command = "#{extract_path}/bin/#{release_name} start"
-                IO.puts("Could not find executables, using release name: #{command}")
-                command
             end
-          end
+          _ ->
+            command = "#{extract_path}/bin/start"
+            IO.puts("Could not find executables, using fallback: #{command}")
+            command
         end
       
       SSHClient.path_exists?(connection, Path.join(extract_path, "start.sh")) ->
@@ -623,5 +855,10 @@ defmodule Elixihub.Deployment.AppInstaller do
       true ->
         "4000"  # default port
     end
+  end
+  
+  defp generate_secret_key_base do
+    # Generate a 64-byte random secret key base
+    :crypto.strong_rand_bytes(64) |> Base.encode64()
   end
 end
