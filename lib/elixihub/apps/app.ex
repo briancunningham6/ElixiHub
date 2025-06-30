@@ -3,6 +3,7 @@ defmodule Elixihub.Apps.App do
   import Ecto.Changeset
 
   @valid_statuses ["active", "inactive", "pending"]
+  @valid_deployment_statuses ["pending", "deploying", "deployed", "failed"]
 
   schema "apps" do
     field :name, :string
@@ -11,7 +12,17 @@ defmodule Elixihub.Apps.App do
     field :url, :string
     field :api_key, :string
     
+    # Deployment fields
+    field :deployment_status, :string, default: "pending"
+    field :deployment_log, :map, default: %{}
+    field :deployed_at, :utc_datetime
+    field :deploy_path, :string
+    field :ssh_host, :string
+    field :ssh_port, :integer, default: 22
+    field :ssh_username, :string
+    
     belongs_to :node, Elixihub.Nodes.Node
+    belongs_to :host, Elixihub.Hosts.Host
 
     timestamps(type: :utc_datetime)
   end
@@ -19,10 +30,12 @@ defmodule Elixihub.Apps.App do
   @doc false
   def changeset(app, attrs) do
     app
-    |> cast(attrs, [:name, :description, :url, :status, :node_id])
+    |> cast(attrs, [:name, :description, :url, :status, :node_id, :host_id, :deployment_status, :deployment_log, :deployed_at, :deploy_path, :ssh_host, :ssh_port, :ssh_username])
     |> validate_required([:name, :description, :url])
     |> validate_inclusion(:status, @valid_statuses)
+    |> validate_inclusion(:deployment_status, @valid_deployment_statuses)
     |> validate_format(:url, ~r/^https?:\/\//)
+    |> validate_number(:ssh_port, greater_than: 0, less_than: 65536)
     |> generate_api_key()
     |> unique_constraint(:api_key)
     |> unique_constraint(:name)
@@ -31,10 +44,12 @@ defmodule Elixihub.Apps.App do
   @doc false
   def update_changeset(app, attrs) do
     app
-    |> cast(attrs, [:name, :description, :url, :status, :node_id])
+    |> cast(attrs, [:name, :description, :url, :status, :node_id, :host_id, :deployment_status, :deployment_log, :deployed_at, :deploy_path, :ssh_host, :ssh_port, :ssh_username])
     |> validate_required([:name, :description, :url])
     |> validate_inclusion(:status, @valid_statuses)
+    |> validate_inclusion(:deployment_status, @valid_deployment_statuses)
     |> validate_format(:url, ~r/^https?:\/\//)
+    |> validate_number(:ssh_port, greater_than: 0, less_than: 65536)
     |> unique_constraint(:name)
   end
 

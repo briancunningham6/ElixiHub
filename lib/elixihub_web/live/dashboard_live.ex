@@ -233,6 +233,28 @@ defmodule ElixihubWeb.DashboardLive do
                   </p>
                 </div>
               </.link>
+
+              <.link
+                navigate={~p"/admin/hosts"}
+                class="relative group bg-white p-6 focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 rounded-lg border border-gray-300 hover:border-gray-400"
+              >
+                <div>
+                  <span class="rounded-lg inline-flex p-3 bg-red-50 text-red-700 ring-4 ring-white">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h6a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h6a2 2 0 002-2v-4a2 2 0 00-2-2m8-8v8m0-8a2 2 0 012-2h2a2 2 0 012 2v8a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </span>
+                </div>
+                <div class="mt-8">
+                  <h3 class="text-lg font-medium">
+                    <span class="absolute inset-0" aria-hidden="true"></span>
+                    Manage Hosts
+                  </h3>
+                  <p class="mt-2 text-sm text-gray-500">
+                    Configure deployment hosts for applications.
+                  </p>
+                </div>
+              </.link>
             </div>
           </div>
         </div>

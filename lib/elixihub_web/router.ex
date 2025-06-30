@@ -118,10 +118,17 @@ defmodule ElixihubWeb.Router do
     live "/admin/nodes/:id/edit", Admin.NodeLive.Index, :edit
     live "/admin/nodes/:node_id/shell", Admin.ShellLive.Index, :show
     
+    # Admin Host Management
+    live "/admin/hosts", Admin.HostLive.Index, :index
+    live "/admin/hosts/new", Admin.HostLive.Index, :new
+    live "/admin/hosts/:id/edit", Admin.HostLive.Index, :edit
+    
     # Admin App Management
     live "/admin/apps", Admin.AppLive.Index, :index
     live "/admin/apps/new", Admin.AppLive.Index, :new
+    live "/admin/apps/deploy", Admin.AppLive.Index, :deploy_select
     live "/admin/apps/:id/edit", Admin.AppLive.Index, :edit
+    live "/admin/apps/:id/deploy", Admin.AppLive.Index, :deploy
   end
 
   scope "/", ElixihubWeb do

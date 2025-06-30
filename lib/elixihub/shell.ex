@@ -27,20 +27,17 @@ defmodule Elixihub.Shell do
         node_name = String.to_atom("#{node.name}@#{node.host}")
         
         try do
-          # Use a more comprehensive evaluation approach
+          # Use Code.eval_string directly on the remote node instead of our custom function
           task = Task.async(fn ->
-            :rpc.call(node_name, __MODULE__, :safe_eval, [code], timeout)
+            :rpc.call(node_name, Code, :eval_string, [code], timeout)
           end)
           
           case Task.await(task, timeout + 1000) do
             {:badrpc, reason} ->
               {:error, format_rpc_error(reason)}
             
-            {:ok, result} ->
+            {result, _bindings} ->
               {:ok, result}
-            
-            {:error, error} ->
-              {:error, format_eval_error(error)}
             
             result ->
               {:ok, result}
@@ -51,6 +48,12 @@ defmodule Elixihub.Shell do
         catch
           :exit, reason ->
             {:error, "Process exited: #{inspect(reason)}"}
+          
+          :throw, value ->
+            {:error, "Thrown: #{inspect(value)}"}
+          
+          :error, reason ->
+            {:error, "Error: #{inspect(reason)}"}
         end
       
       # Node is not connected
@@ -98,23 +101,39 @@ defmodule Elixihub.Shell do
   Gets information about a remote node.
   """
   def get_node_info(node) do
-    if node_connected?(node) do
-      node_name = String.to_atom("#{node.name}@#{node.host}")
-      
-      info = %{
-        node: node_name,
-        applications: :rpc.call(node_name, Application, :started_applications, []),
-        system_info: %{
-          version: :rpc.call(node_name, System, :version, []),
-          otp_release: :rpc.call(node_name, System, :otp_release, []),
-          schedulers: :rpc.call(node_name, :erlang, :system_info, [:schedulers]),
-          process_count: :rpc.call(node_name, :erlang, :system_info, [:process_count])
+    cond do
+      node.is_current ->
+        # Get local info
+        info = %{
+          node: :erlang.node(),
+          applications: Application.started_applications(),
+          system_info: %{
+            version: System.version(),
+            otp_release: System.otp_release(),
+            schedulers: :erlang.system_info(:schedulers),
+            process_count: :erlang.system_info(:process_count)
+          }
         }
-      }
+        {:ok, info}
       
-      {:ok, info}
-    else
-      {:error, "Node not connected"}
+      node_connected?(node) ->
+        node_name = String.to_atom("#{node.name}@#{node.host}")
+        
+        info = %{
+          node: node_name,
+          applications: :rpc.call(node_name, Application, :started_applications, []),
+          system_info: %{
+            version: :rpc.call(node_name, System, :version, []),
+            otp_release: :rpc.call(node_name, System, :otp_release, []),
+            schedulers: :rpc.call(node_name, :erlang, :system_info, [:schedulers]),
+            process_count: :rpc.call(node_name, :erlang, :system_info, [:process_count])
+          }
+        }
+        
+        {:ok, info}
+      
+      true ->
+        {:error, "Node not connected"}
     end
   end
 
@@ -122,24 +141,42 @@ defmodule Elixihub.Shell do
   Lists all processes on a remote node.
   """
   def list_remote_processes(node, limit \\ 50) do
-    if node_connected?(node) do
-      node_name = String.to_atom("#{node.name}@#{node.host}")
+    cond do
+      node.is_current ->
+        # Get local processes
+        processes = Process.list()
+        |> Enum.take(limit)
+        |> Enum.map(fn pid ->
+          info = Process.info(pid, [:registered_name, :current_function, :message_queue_len])
+          %{
+            pid: inspect(pid),
+            name: Keyword.get(info, :registered_name),
+            current_function: Keyword.get(info, :current_function),
+            message_queue_len: Keyword.get(info, :message_queue_len)
+          }
+        end)
+        
+        {:ok, processes}
       
-      processes = :rpc.call(node_name, Process, :list, [])
-      |> Enum.take(limit)
-      |> Enum.map(fn pid ->
-        info = :rpc.call(node_name, Process, :info, [pid, [:registered_name, :current_function, :message_queue_len]])
-        %{
-          pid: inspect(pid),
-          name: Keyword.get(info, :registered_name),
-          current_function: Keyword.get(info, :current_function),
-          message_queue_len: Keyword.get(info, :message_queue_len)
-        }
-      end)
+      node_connected?(node) ->
+        node_name = String.to_atom("#{node.name}@#{node.host}")
+        
+        processes = :rpc.call(node_name, Process, :list, [])
+        |> Enum.take(limit)
+        |> Enum.map(fn pid ->
+          info = :rpc.call(node_name, Process, :info, [pid, [:registered_name, :current_function, :message_queue_len]])
+          %{
+            pid: inspect(pid),
+            name: Keyword.get(info, :registered_name),
+            current_function: Keyword.get(info, :current_function),
+            message_queue_len: Keyword.get(info, :message_queue_len)
+          }
+        end)
+        
+        {:ok, processes}
       
-      {:ok, processes}
-    else
-      {:error, "Node not connected"}
+      true ->
+        {:error, "Node not connected"}
     end
   end
 

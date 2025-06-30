@@ -61,6 +61,13 @@ config :logger, :console,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Configure MIME types for deployment uploads
+config :mime, :types, %{
+  "application/x-tar" => ["tar"],
+  "application/gzip" => ["gz", "tgz"],
+  "application/x-gzip" => ["tar.gz"]
+}
+
 # Guardian configuration
 config :elixihub, Elixihub.Guardian,
   issuer: "elixihub",

@@ -41,9 +41,43 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
     |> assign(:app, Apps.get_app!(id))
   end
 
+  defp apply_action(socket, :deploy, %{"id" => id}) do
+    app = Apps.get_app!(id) |> Elixihub.Repo.preload(:node)
+    socket
+    |> assign(:page_title, "Deploy Application")
+    |> assign(:app, app)
+  end
+
+  defp apply_action(socket, :deploy_select, _params) do
+    socket
+    |> assign(:page_title, "Select App to Deploy")
+    |> assign(:app, nil)
+  end
+
   @impl true
   def handle_info({ElixihubWeb.Admin.AppLive.FormComponent, {:saved, _app}}, socket) do
     {:noreply, assign(socket, :apps, Apps.list_apps())}
+  end
+
+  @impl true
+  def handle_info({:deployment_complete, app_id, status, result}, socket) do
+    # Refresh the apps list to show updated deployment status
+    {:noreply, 
+     socket
+     |> assign(:apps, Apps.list_apps())
+     |> put_flash(case status do
+       :success -> :info
+       :error -> :error
+     end, case status do
+       :success -> "Deployment completed successfully!"
+       :error -> "Deployment failed: #{inspect(result)}"
+     end)
+    }
+  end
+
+  @impl true
+  def handle_info({:select_app_for_deploy, app_id}, socket) do
+    {:noreply, push_patch(socket, to: ~p"/admin/apps/#{app_id}/deploy")}
   end
 
   @impl true
@@ -92,12 +126,18 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
               <h1 class="text-3xl font-bold text-gray-900 mt-2">Manage Applications</h1>
               <p class="mt-1 text-sm text-gray-500">Register and configure external applications</p>
             </div>
-            <div>
+            <div class="flex space-x-3">
               <.link
                 patch={~p"/admin/apps/new"}
                 class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
               >
                 Register New App
+              </.link>
+              <.link
+                patch={~p"/admin/apps/deploy"}
+                class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Deploy App
               </.link>
             </div>
           </div>
@@ -156,6 +196,23 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
                   <div class="text-xs text-gray-400 mt-1">
                     Registered: <%= Calendar.strftime(app.inserted_at, "%B %d, %Y at %I:%M %p") %>
                   </div>
+                  <div :if={app.deployment_status != "pending"} class="text-xs mt-1">
+                    <span class="text-gray-500">Deployment:</span>
+                    <span class={[
+                      "ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium",
+                      case app.deployment_status do
+                        "deployed" -> "bg-green-100 text-green-800"
+                        "deploying" -> "bg-blue-100 text-blue-800"
+                        "failed" -> "bg-red-100 text-red-800"
+                        _ -> "bg-gray-100 text-gray-800"
+                      end
+                    ]}>
+                      <%= String.capitalize(app.deployment_status || "pending") %>
+                    </span>
+                    <span :if={app.deployed_at} class="ml-1 text-gray-400">
+                      on <%= Calendar.strftime(app.deployed_at, "%m/%d/%y") %>
+                    </span>
+                  </div>
                 </div>
                 
                 <div class="flex items-center space-x-2">
@@ -173,6 +230,13 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
                   >
                     <%= if app.status == "active", do: "Deactivate", else: "Activate" %>
                   </button>
+                  
+                  <.link
+                    patch={~p"/admin/apps/#{app}/deploy"}
+                    class="text-purple-600 hover:text-purple-900 text-sm font-medium"
+                  >
+                    Deploy
+                  </.link>
                   
                   <.link
                     patch={~p"/admin/apps/#{app}/edit"}
@@ -228,6 +292,33 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
         title={@page_title}
         action={@live_action}
         app={@app}
+        patch={~p"/admin/apps"}
+      />
+    </.modal>
+
+    <.modal
+      :if={@live_action == :deploy}
+      id="deploy-modal"
+      show
+      on_cancel={JS.patch(~p"/admin/apps")}
+    >
+      <.live_component
+        module={ElixihubWeb.Admin.AppLive.DeploySimpleComponent}
+        id={"deploy-#{@app.id}"}
+        app={@app}
+        patch={~p"/admin/apps"}
+      />
+    </.modal>
+
+    <.modal
+      :if={@live_action == :deploy_select}
+      id="deploy-select-modal"
+      show
+      on_cancel={JS.patch(~p"/admin/apps")}
+    >
+      <.live_component
+        module={ElixihubWeb.Admin.AppLive.DeploySelectComponent}
+        id="deploy-select"
         patch={~p"/admin/apps"}
       />
     </.modal>
