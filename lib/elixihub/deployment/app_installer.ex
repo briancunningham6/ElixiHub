@@ -583,10 +583,7 @@ defmodule Elixihub.Deployment.AppInstaller do
     Environment=RELEASE_COOKIE=elixihub-#{service_name}
     Environment=SECRET_KEY_BASE=#{secret_key_base}
     Environment=PHX_HOST=localhost
-    Environment=OPENAI_API_KEY=your_openai_api_key_here
-    Environment=ELIXIHUB_JWT_SECRET=your_elixihub_jwt_secret_here
-    Environment=ELIXIHUB_URL=http://localhost:4000
-    Environment=HELLO_WORLD_MCP_URL=http://localhost:4001/api/mcp
+    #{get_app_specific_env_vars(app)}
     StandardOutput=journal
     StandardError=journal
     SyslogIdentifier=#{service_name}
@@ -849,16 +846,46 @@ defmodule Elixihub.Deployment.AppInstaller do
         # Extract port from URL if present
         case Regex.run(~r/:(\d+)/, app.url) do
           [_, port] -> port
-          _ -> "4000"
+          _ -> get_default_port_by_name(app.name)
         end
       
       true ->
-        "4000"  # default port
+        get_default_port_by_name(app.name)
+    end
+  end
+  
+  defp get_default_port_by_name(app_name) do
+    # Set default ports based on app name
+    cond do
+      String.contains?(String.downcase(app_name), "agent") -> "4003"
+      String.contains?(String.downcase(app_name), "hello") -> "4001"
+      true -> "4000"  # fallback default
     end
   end
   
   defp generate_secret_key_base do
     # Generate a 64-byte random secret key base
     :crypto.strong_rand_bytes(64) |> Base.encode64()
+  end
+  
+  defp get_app_specific_env_vars(app) do
+    app_name_lower = String.downcase(app.name)
+    
+    cond do
+      String.contains?(app_name_lower, "agent") ->
+        """
+        Environment=OPENAI_API_KEY=your_openai_api_key_here
+        Environment=ELIXIHUB_JWT_SECRET=your_elixihub_jwt_secret_here
+        Environment=ELIXIHUB_URL=http://localhost:4000
+        Environment=HELLO_WORLD_MCP_URL=http://localhost:4001/api/mcp"""
+      
+      String.contains?(app_name_lower, "hello") ->
+        """
+        Environment=ELIXIHUB_JWT_SECRET=your_elixihub_jwt_secret_here
+        Environment=ELIXIHUB_URL=http://localhost:4000"""
+      
+      true ->
+        "# No app-specific environment variables"
+    end
   end
 end
