@@ -2,7 +2,7 @@ defmodule Elixihub.Accounts.User do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Elixihub.Authorization.Role
+  alias Elixihub.Authorization.{Role, UserRole}
 
   schema "users" do
     field :email, :string
@@ -12,6 +12,7 @@ defmodule Elixihub.Accounts.User do
     field :confirmed_at, :utc_datetime
 
     many_to_many :roles, Role, join_through: "user_roles"
+    has_many :user_roles, UserRole
 
     timestamps(type: :utc_datetime)
   end

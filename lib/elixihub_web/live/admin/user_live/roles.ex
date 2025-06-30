@@ -261,68 +261,6 @@ defmodule ElixihubWeb.Admin.UserLive.Roles do
           </div>
         </div>
 
-        <!-- Current Assignments Summary -->
-        <div class="bg-white shadow rounded-lg">
-          <div class="px-6 py-4 border-b border-gray-200">
-            <h3 class="text-lg font-medium text-gray-900">Current Role Assignments</h3>
-          </div>
-          <div class="p-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <!-- System Roles -->
-              <div>
-                <h4 class="text-sm font-medium text-gray-900 mb-3">System Roles</h4>
-                <%= if Enum.empty?(@system_role_ids) do %>
-                  <p class="text-sm text-gray-500">No system roles assigned.</p>
-                <% else %>
-                  <div class="space-y-2">
-                    <div
-                      :for={role <- @all_roles}
-                      :if={role.id in @system_role_ids}
-                      class="flex items-center justify-between p-2 bg-blue-50 border border-blue-200 rounded-lg"
-                    >
-                      <div>
-                        <p class="text-sm font-medium text-blue-900"><%= role.name %></p>
-                      </div>
-                      <button
-                        phx-click="toggle_system_role"
-                        phx-value-role_id={role.id}
-                        class="text-blue-600 hover:text-blue-800 text-sm"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                <% end %>
-              </div>
-
-              <!-- App Roles -->
-              <div>
-                <h4 class="text-sm font-medium text-gray-900 mb-3">Application Roles</h4>
-                <%= if Enum.empty?(@app_role_ids) do %>
-                  <p class="text-sm text-gray-500">No app roles assigned.</p>
-                <% else %>
-                  <div class="space-y-2">
-                    <%= for app <- @all_apps, app_role <- app.app_roles, app_role.id in @app_role_ids do %>
-                      <div class="flex items-center justify-between p-2 bg-indigo-50 border border-indigo-200 rounded-lg">
-                        <div>
-                          <p class="text-sm font-medium text-indigo-900"><%= app_role.name %></p>
-                          <p class="text-xs text-indigo-700">from <%= app.name %></p>
-                        </div>
-                        <button
-                          phx-click="toggle_app_role"
-                          phx-value-app_role_id={app_role.id}
-                          class="text-indigo-600 hover:text-indigo-800 text-sm"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    <% end %>
-                  </div>
-                <% end %>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
     """

@@ -292,6 +292,73 @@ defmodule Elixihub.Authorization do
     |> Enum.any?(&(&1.name == permission_name))
   end
 
+  # System Role functions
+
+  @doc """
+  Assigns a system role to a user.
+  """
+  def assign_role_to_user(user, role) do
+    alias Elixihub.Authorization.UserRole
+    
+    # Check if user already has this role
+    existing = Repo.get_by(UserRole, user_id: user.id, role_id: role.id)
+    
+    if existing do
+      {:ok, user}
+    else
+      %UserRole{}
+      |> UserRole.changeset(%{user_id: user.id, role_id: role.id})
+      |> Repo.insert()
+      |> case do
+        {:ok, _user_role} -> {:ok, user}
+        error -> error
+      end
+    end
+  end
+
+  @doc """
+  Removes a system role from a user.
+  """
+  def remove_role_from_user(user, role) do
+    alias Elixihub.Authorization.UserRole
+    
+    case Repo.get_by(UserRole, user_id: user.id, role_id: role.id) do
+      nil -> {:ok, user}
+      user_role -> 
+        case Repo.delete(user_role) do
+          {:ok, _} -> {:ok, user}
+          error -> error
+        end
+    end
+  end
+
+  @doc """
+  Gets all system roles for a user.
+  """
+  def get_user_system_roles(%User{} = user) do
+    alias Elixihub.Authorization.UserRole
+    
+    from(ur in UserRole,
+      join: r in Role, on: ur.role_id == r.id,
+      where: ur.user_id == ^user.id and not is_nil(ur.role_id),
+      select: r
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Checks if a user has a specific system role.
+  """
+  def user_has_role?(%User{} = user, role_name) do
+    alias Elixihub.Authorization.UserRole
+    
+    query = from ur in UserRole,
+      join: r in Role, on: ur.role_id == r.id,
+      where: ur.user_id == ^user.id and r.name == ^role_name
+    
+    Repo.exists?(query)
+  end
+
   # App Role functions
 
   @doc """
@@ -362,5 +429,24 @@ defmodule Elixihub.Authorization do
              ar.app_id == ^app_id
     
     Repo.exists?(query)
+  end
+
+  @doc """
+  Cleanup function to remove app roles that were incorrectly created as system roles.
+  App roles should only exist in the app_roles table, not in the main roles table.
+  """
+  def cleanup_app_roles_from_system_roles() do
+    # Find all system roles that look like app roles (contain ":")
+    app_like_roles = from(r in Role, where: like(r.name, "%:%"))
+                    |> Repo.all()
+    
+    cleaned_count = Enum.reduce(app_like_roles, 0, fn role, acc ->
+      case delete_role(role) do
+        {:ok, _} -> acc + 1
+        {:error, _} -> acc
+      end
+    end)
+    
+    {:ok, cleaned_count}
   end
 end
