@@ -7,97 +7,72 @@ defmodule AgentAppWeb.ChatLive do
 
   @impl true
   def mount(_params, session, socket) do
-    Logger.info("ChatLive mount started")
+    Logger.info("ChatLive mount - session keys: #{inspect(Map.keys(session))}")
+    Logger.info("ChatLive mount - socket assigns: #{inspect(Map.keys(socket.assigns))}")
     
+    # Check authentication at LiveView level with better debugging
+    current_user = case socket.assigns[:current_user] do
+      nil -> 
+        Logger.info("No current_user in assigns, checking session")
+        case Map.get(session, "auth_token") do
+          token when is_binary(token) ->
+            Logger.info("Found auth_token in session, verifying...")
+            case AgentApp.Auth.verify_token(token) do
+              {:ok, user} -> 
+                Logger.info("Token verification successful: #{inspect(user)}")
+                user
+              {:error, reason} -> 
+                Logger.warning("Token verification failed: #{inspect(reason)}")
+                nil
+            end
+          other ->
+            Logger.warning("No valid auth_token in session: #{inspect(other)}")
+            nil
+        end
+      user -> 
+        Logger.info("Using current_user from assigns: #{inspect(user)}")
+        user
+    end
+    
+    # Always allow mount but show different content based on auth
+    socket =
+      socket
+      |> assign(:messages, [])
+      |> assign(:input_message, "")
+      |> assign(:loading, false)
+      |> assign(:available_tools, [])
+      |> assign(:mcp_servers, [])
+      |> assign(:current_user, current_user || %{username: "Guest", user_id: nil, email: nil})
+
+    # Load tools/servers in background
+    send(self(), :load_mcp_data)
+    
+    {:ok, socket}
+  end
+
+  @impl true
+  def handle_info(:load_mcp_data, socket) do
+    # Load MCP data in background to avoid blocking mount
     try do
-      # Get current user from session token (since LiveView needs special handling)
-      current_user = case Map.get(session, "auth_token") do
-        nil -> 
-          Logger.warning("No auth token in session")
-          %{username: "anonymous", user_id: nil}
-        
-        token ->
-          case AgentApp.Auth.verify_token(token) do
-            {:ok, user} ->
-              Logger.info("Successfully verified user: #{inspect(user)}")
-              user
-            {:error, reason} ->
-              Logger.warning("Failed to verify token: #{inspect(reason)}")
-              %{username: "anonymous", user_id: nil}
-          end
+      tools = case AgentApp.MCPManager.list_available_tools() do
+        {:ok, tools} -> tools
+        {:error, _} -> []
       end
-      
-      Logger.info("ChatLive mount for user: #{inspect(current_user)}")
-      
-      # Initialize the chat interface
+
+      servers = case AgentApp.MCPManager.list_mcp_servers() do
+        {:ok, servers} -> servers
+        {:error, _} -> []
+      end
+
       socket =
         socket
-        |> assign(:messages, [])
-        |> assign(:input_message, "")
-        |> assign(:loading, false)
-        |> assign(:available_tools, [])
-        |> assign(:mcp_servers, [])
-        |> assign(:current_user, current_user)
+        |> assign(:available_tools, tools)
+        |> assign(:mcp_servers, servers)
 
-      Logger.info("Basic socket assigns completed")
-
-      # Load available tools and MCP servers with timeout and error handling
-      final_socket = try do
-        tools_result = case AgentApp.MCPManager.list_available_tools() do
-          {:ok, tools} ->
-            Logger.info("Successfully loaded #{length(tools)} tools")
-            {:ok, tools}
-          {:error, reason} ->
-            Logger.warning("Failed to load available tools: #{inspect(reason)}")
-            {:ok, []}
-        end
-
-        servers_result = case AgentApp.MCPManager.list_mcp_servers() do
-          {:ok, servers} ->
-            Logger.info("Successfully loaded #{length(servers)} MCP servers")
-            {:ok, servers}
-          {:error, reason} ->
-            Logger.warning("Failed to load MCP servers: #{inspect(reason)}")
-            {:ok, []}
-        end
-
-        case {tools_result, servers_result} do
-          {{:ok, tools}, {:ok, servers}} ->
-            socket
-            |> assign(:available_tools, tools)
-            |> assign(:mcp_servers, servers)
-          _ ->
-            socket
-        end
-      catch
-        :exit, {:timeout, _} ->
-          Logger.warning("Timeout loading MCP data - MCPManager may still be starting")
-          socket
-        
-        kind, reason ->
-          Logger.warning("Error loading MCP data: #{kind} - #{inspect(reason)}")
-          socket
-      end
-
-      Logger.info("ChatLive mount completed successfully")
-      {:ok, final_socket}
+      {:noreply, socket}
     rescue
-      error ->
-        Logger.error("Error in ChatLive mount: #{inspect(error)}")
-        Logger.error("Stacktrace: #{inspect(__STACKTRACE__)}")
-        
-        # Return a minimal working socket
-        current_user = socket.assigns[:current_user] || %{username: "anonymous", user_id: nil}
-        minimal_socket = 
-          socket
-          |> assign(:messages, [])
-          |> assign(:input_message, "")
-          |> assign(:loading, false)
-          |> assign(:available_tools, [])
-          |> assign(:mcp_servers, [])
-          |> assign(:current_user, current_user)
-          
-        {:ok, minimal_socket}
+      _ ->
+        {:noreply, socket}
     end
   end
 
@@ -334,7 +309,7 @@ defmodule AgentAppWeb.ChatLive do
               <h1 class="text-xl font-semibold text-white">ElixiHub Agent</h1>
               <div class="flex items-center space-x-4">
                 <span class="text-blue-100 text-sm">
-                  User: <%= @current_user.username %>
+                  User: <%= @current_user.email || @current_user.username %>
                 </span>
                 <button
                   phx-click="clear_chat"

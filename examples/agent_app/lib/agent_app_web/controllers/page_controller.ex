@@ -6,13 +6,24 @@ defmodule AgentAppWeb.PageController do
   import Plug.Conn
 
   def home(conn, _params) do
+    require Logger
+    Logger.info("Home page accessed")
+    Logger.info("Session keys: #{inspect(Map.keys(get_session(conn)))}")
+    Logger.info("Current user: #{inspect(conn.assigns[:current_user])}")
+    
     current_user = conn.assigns[:current_user]
     
-    if current_user do
+    # Also check session as backup
+    auth_token = get_session(conn, :auth_token)
+    Logger.info("Auth token in session: #{inspect(auth_token != nil)}")
+    
+    if current_user && current_user.user_id do
       # User is authenticated, redirect to chat
+      Logger.info("Redirecting authenticated user to chat")
       redirect(conn, to: "/chat")
     else
       # User is not authenticated, automatically redirect to SSO
+      Logger.info("Redirecting unauthenticated user to SSO")
       elixihub_config = Application.get_env(:agent_app, :elixihub)
       elixihub_url = elixihub_config[:elixihub_url] || "http://localhost:4005"
       

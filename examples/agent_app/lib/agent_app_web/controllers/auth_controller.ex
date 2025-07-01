@@ -12,6 +12,7 @@ defmodule AgentAppWeb.AuthController do
         
         conn
         |> put_session(:auth_token, token)
+        |> assign(:current_user, user)  # Also set in assigns for immediate use
         |> put_resp_cookie("auth_token", token, [
           max_age: 4 * 60 * 60, # 4 hours (matching ElixiHub token TTL)
           http_only: true,
