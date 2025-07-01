@@ -19,7 +19,7 @@ config :elixihub, Elixihub.Repo,
 config :elixihub, ElixihubWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
-  http: [ip: {127, 0, 0, 1}, port: 4005],
+  http: [ip: {0, 0, 0, 0}, port: 4005],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
@@ -83,4 +83,4 @@ config :swoosh, :api_client, false
 
 # Guardian configuration for development
 config :elixihub, Elixihub.Guardian,
-  secret_key: "dev_secret_key_32_chars_long_exactly"
+  secret_key: "dev_secret_key_32_chars_long_exactly_for_jwt_signing"

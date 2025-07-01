@@ -79,7 +79,7 @@ The ElixiHub deployment system will automatically:
 - HELLO_WORLD_MCP_URL: URL of hello world MCP endpoint
 
 ## Port Configuration:
-The application will run on port 4003 by default.
+The application will run on IP 192.168.0.188:4003 by default.
 EOF
 
 # Create the tar file

@@ -18,8 +18,8 @@ defmodule ElixihubWeb.SSOController do
     case get_session(conn, :user_token) do
       nil ->
         # User not logged in - redirect to login with SSO continuation
-        login_url = Routes.user_session_path(conn, :new) <> 
-          "?return_to=" <> URI.encode("#{Routes.sso_path(conn, :authenticate)}?app_id=#{app_id}&return_to=#{URI.encode(return_url)}")
+        login_url = ~p"/users/log_in" <> 
+          "?return_to=" <> URI.encode("#{~p"/sso/auth"}?app_id=#{app_id}&return_to=#{URI.encode(return_url)}")
         
         redirect(conn, to: login_url)
       
@@ -42,8 +42,8 @@ defmodule ElixihubWeb.SSOController do
           nil ->
             Logger.warning("Invalid user session token")
             # Invalid session - redirect to login
-            login_url = Routes.user_session_path(conn, :new) <> 
-              "?return_to=" <> URI.encode("#{Routes.sso_path(conn, :authenticate)}?app_id=#{app_id}&return_to=#{URI.encode(return_url)}")
+            login_url = ~p"/users/log_in" <> 
+              "?return_to=" <> URI.encode("#{~p"/sso/auth"}?app_id=#{app_id}&return_to=#{URI.encode(return_url)}")
             
             redirect(conn, to: login_url)
         end
@@ -102,10 +102,17 @@ defmodule ElixihubWeb.SSOController do
   defp generate_sso_token_and_redirect(conn, user, return_url) do
     Logger.info("Generating SSO token for user: #{user.id}")
     
+    # Debug: Log the Guardian secret being used
+    guardian_config = Application.get_env(:elixihub, Elixihub.Guardian)
+    secret = guardian_config[:secret_key]
+    Logger.info("ElixiHub Guardian secret: #{inspect(secret)}")
+    
     # Generate a JWT token for the user
-    case Elixihub.Guardian.encode_and_sign(user, %{}, ttl: {4, :hours}) do
-      {:ok, token, _claims} ->
+    case Elixihub.Guardian.encode_and_sign(user) do
+      {:ok, token, claims} ->
         Logger.info("Successfully generated SSO token")
+        Logger.info("Token claims: #{inspect(claims)}")
+        Logger.info("Token (first 50 chars): #{String.slice(token, 0, 50)}...")
         
         # Parse return URL to add token parameter
         uri = URI.parse(return_url)

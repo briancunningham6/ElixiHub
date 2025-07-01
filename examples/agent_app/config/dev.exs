@@ -1,7 +1,8 @@
 import Config
 
 config :agent_app, AgentAppWeb.Endpoint,
-  http: [ip: {127, 0, 0, 1}, port: 4003],
+  url: [host: "192.168.0.188", port: 4003],
+  http: [ip: {0, 0, 0, 0}, port: 4003],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
@@ -32,9 +33,10 @@ config :agent_app, :openai,
   http_options: [recv_timeout: 30_000]
 
 # ElixiHub configuration for authentication and discovery
+# Note: Replace 192.168.0.XXX with the actual IP address of the machine running ElixiHub
 config :agent_app, :elixihub,
-  jwt_secret: System.get_env("ELIXIHUB_JWT_SECRET", "elixihub_jwt_secret_dev"),
-  elixihub_url: System.get_env("ELIXIHUB_URL", "http://localhost:4005")
+  jwt_secret: System.get_env("ELIXIHUB_JWT_SECRET", "dev_secret_key_32_chars_long_exactly_for_jwt_signing"),
+  elixihub_url: System.get_env("ELIXIHUB_URL", "http://192.168.0.1:4005")
 
 # MCP configuration
 config :agent_app, :mcp,

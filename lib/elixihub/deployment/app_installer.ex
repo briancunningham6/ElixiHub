@@ -1017,14 +1017,14 @@ defmodule Elixihub.Deployment.AppInstaller do
       String.contains?(app_name_lower, "agent") ->
         ~s"""
         Environment=OPENAI_API_KEY=your_openai_api_key_here
-        Environment=ELIXIHUB_JWT_SECRET=your_elixihub_jwt_secret_here
+        Environment=ELIXIHUB_JWT_SECRET=dev_secret_key_32_chars_long_exactly_for_jwt_signing
         Environment=ELIXIHUB_URL=http://localhost:4005
         Environment=HELLO_WORLD_MCP_URL=http://localhost:4001/api/mcp
         """
       
       String.contains?(app_name_lower, "hello") ->
         ~s"""
-        Environment=ELIXIHUB_JWT_SECRET=your_elixihub_jwt_secret_here
+        Environment=ELIXIHUB_JWT_SECRET=dev_secret_key_32_chars_long_exactly_for_jwt_signing
         Environment=ELIXIHUB_URL=http://localhost:4005
         """
       

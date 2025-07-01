@@ -71,10 +71,7 @@ config :mime, :types, %{
 # Guardian configuration
 config :elixihub, Elixihub.Guardian,
   issuer: "elixihub",
-  secret_key: "your-256-bit-secret-key-here",
-  allowed_algos: ["HS256"],
-  verify_module: Guardian.JWT,
-  token_module: Guardian.Token
+  secret_key: "your-256-bit-secret-key-here"
 
 # Guardian DB configuration
 config :guardian, Guardian.DB,

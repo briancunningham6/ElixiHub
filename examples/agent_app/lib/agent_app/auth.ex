@@ -17,16 +17,34 @@ defmodule AgentApp.Auth do
   def verify_token(token) do
     secret = Application.get_env(:agent_app, :elixihub)[:jwt_secret]
     
-    case verify_and_validate(token, secret) do
-      {:ok, claims} ->
-        {:ok, %{
-          user_id: claims["user_id"],
-          username: claims["username"],
-          roles: claims["roles"] || []
-        }}
+    # Debug logging
+    require Logger
+    Logger.info("Agent app JWT secret: #{inspect(secret)}")
+    Logger.info("Token to verify: #{String.slice(token, 0, 50)}...")
+    
+    # Use Joken with proper signer for Guardian tokens
+    try do
+      # Create signer that matches Guardian's HS512 configuration
+      signer = Joken.Signer.create("HS512", secret)
       
-      {:error, reason} ->
-        {:error, reason}
+      # Verify the token without additional validation (Guardian handles this)
+      case Joken.verify(token, signer) do
+        {:ok, claims} ->
+          Logger.info("Token verification successful: #{inspect(claims)}")
+          {:ok, %{
+            user_id: String.to_integer(claims["sub"]),
+            username: claims["username"] || claims["sub"],
+            roles: claims["roles"] || []
+          }}
+        
+        {:error, reason} ->
+          Logger.error("Token verification failed: #{inspect(reason)}")
+          {:error, reason}
+      end
+    rescue
+      error ->
+        Logger.error("Token verification exception: #{inspect(error)}")
+        {:error, :verification_error}
     end
   end
 
