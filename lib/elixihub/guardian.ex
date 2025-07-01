@@ -7,6 +7,15 @@ defmodule Elixihub.Guardian do
     {:ok, to_string(user.id)}
   end
 
+  def build_claims(claims, user, _opts) do
+    # Add custom claims including email as username for now
+    updated_claims = claims
+    |> Map.put("username", user.email)
+    |> Map.put("email", user.email)
+    
+    {:ok, updated_claims}
+  end
+
   def resource_from_claims(%{"sub" => id}) do
     case Accounts.get_user!(id) do
       nil -> {:error, :resource_not_found}

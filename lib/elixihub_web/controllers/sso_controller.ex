@@ -102,17 +102,10 @@ defmodule ElixihubWeb.SSOController do
   defp generate_sso_token_and_redirect(conn, user, return_url) do
     Logger.info("Generating SSO token for user: #{user.id}")
     
-    # Debug: Log the Guardian secret being used
-    guardian_config = Application.get_env(:elixihub, Elixihub.Guardian)
-    secret = guardian_config[:secret_key]
-    Logger.info("ElixiHub Guardian secret: #{inspect(secret)}")
-    
     # Generate a JWT token for the user
     case Elixihub.Guardian.encode_and_sign(user) do
-      {:ok, token, claims} ->
+      {:ok, token, _claims} ->
         Logger.info("Successfully generated SSO token")
-        Logger.info("Token claims: #{inspect(claims)}")
-        Logger.info("Token (first 50 chars): #{String.slice(token, 0, 50)}...")
         
         # Parse return URL to add token parameter
         uri = URI.parse(return_url)
@@ -124,7 +117,6 @@ defmodule ElixihubWeb.SSOController do
         # Reconstruct URL with token
         final_url = %{uri | query: URI.encode_query(new_query)} |> URI.to_string()
         
-        Logger.info("Redirecting to: #{final_url}")
         redirect(conn, external: final_url)
       
       {:error, reason} ->

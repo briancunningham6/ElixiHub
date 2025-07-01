@@ -6,12 +6,27 @@ defmodule AgentAppWeb.ChatLive do
   require Logger
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(_params, session, socket) do
     Logger.info("ChatLive mount started")
     
     try do
-      # Get current user from connection assigns
-      current_user = socket.assigns[:current_user] || %{username: "anonymous", user_id: nil}
+      # Get current user from session token (since LiveView needs special handling)
+      current_user = case Map.get(session, "auth_token") do
+        nil -> 
+          Logger.warning("No auth token in session")
+          %{username: "anonymous", user_id: nil}
+        
+        token ->
+          case AgentApp.Auth.verify_token(token) do
+            {:ok, user} ->
+              Logger.info("Successfully verified user: #{inspect(user)}")
+              user
+            {:error, reason} ->
+              Logger.warning("Failed to verify token: #{inspect(reason)}")
+              %{username: "anonymous", user_id: nil}
+          end
+      end
+      
       Logger.info("ChatLive mount for user: #{inspect(current_user)}")
       
       # Initialize the chat interface
