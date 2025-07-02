@@ -22,17 +22,21 @@ defmodule Elixihub.Deployment do
   - {:error, reason} on failure
   """
   def deploy_app(ssh_config, tar_path, deploy_path, %App{} = app) when is_map(ssh_config) do
+    deploy_app(ssh_config, tar_path, deploy_path, app, nil)
+  end
+
+  def deploy_app(ssh_config, tar_path, deploy_path, %App{} = app, host_architecture) when is_map(ssh_config) do
     full_ssh_config = Map.put(ssh_config, :deploy_path, deploy_path)
     
     with {:ok, _} <- validate_tar_file(tar_path),
          {:ok, _} <- validate_ssh_config(full_ssh_config),
          {:ok, _} <- update_deployment_status(app, "deploying"),
          {:ok, conn} <- SSHClient.connect(ssh_config),
-         {:ok, _} <- stop_existing_service_if_running(conn, app),
+         {:ok, _} <- stop_existing_service_if_running(conn, app, host_architecture),
          {:ok, _} <- TarHandler.upload_and_extract(conn, tar_path, deploy_path),
          {:ok, roles} <- RoleParser.extract_roles(conn, deploy_path),
          {:ok, _} <- sync_app_roles(app, roles),
-         {:ok, result} <- AppInstaller.install_app(conn, app, deploy_path),
+         {:ok, result} <- AppInstaller.install_app(conn, app, deploy_path, host_architecture),
          {:ok, _} <- register_mcp_server(app, conn, deploy_path),
          {:ok, _} <- SSHClient.disconnect(conn),
          {:ok, _} <- update_deployment_status(app, "deployed") do
@@ -65,15 +69,19 @@ defmodule Elixihub.Deployment do
   - {:error, reason} on failure
   """
   def deploy_app(%App{} = app, tar_path, ssh_config) when is_map(ssh_config) do
+    deploy_app(app, tar_path, ssh_config, nil)
+  end
+
+  def deploy_app(%App{} = app, tar_path, ssh_config, host_architecture) when is_map(ssh_config) do
     with {:ok, _} <- validate_tar_file(tar_path),
          {:ok, _} <- validate_ssh_config(ssh_config),
          {:ok, _} <- update_deployment_status(app, "deploying"),
          {:ok, conn} <- SSHClient.connect(ssh_config),
-         {:ok, _} <- stop_existing_service_if_running(conn, app),
+         {:ok, _} <- stop_existing_service_if_running(conn, app, host_architecture),
          {:ok, _} <- TarHandler.upload_and_extract(conn, tar_path, ssh_config.deploy_path),
          {:ok, roles} <- RoleParser.extract_roles(conn, ssh_config.deploy_path),
          {:ok, _} <- sync_app_roles(app, roles),
-         {:ok, result} <- AppInstaller.install_app(conn, app, ssh_config.deploy_path),
+         {:ok, result} <- AppInstaller.install_app(conn, app, ssh_config.deploy_path, host_architecture),
          {:ok, _} <- register_mcp_server(app, conn, ssh_config.deploy_path),
          {:ok, _} <- SSHClient.disconnect(conn),
          {:ok, _} <- update_deployment_status(app, "deployed") do
@@ -99,17 +107,22 @@ defmodule Elixihub.Deployment do
   - {:error, reason} on failure
   """
   def undeploy_app(%App{} = app, ssh_config) when is_map(ssh_config) do
+    undeploy_app(app, ssh_config, nil)
+  end
+
+  def undeploy_app(%App{} = app, ssh_config, host_architecture) when is_map(ssh_config) do
     # Use the actual deployment path that was stored during deployment
     extract_path = app.deploy_path || AppInstaller.get_deployment_path(app)
     
     IO.puts("Starting undeployment for app: #{app.name}")
     IO.puts("Using extract_path: #{extract_path}")
     IO.puts("SSH config: #{inspect(ssh_config)}")
+    IO.puts("Host architecture: #{host_architecture}")
     
     with {:ok, _} <- validate_ssh_config_for_undeploy(ssh_config),
          {:ok, _} <- update_deployment_status(app, "undeploying"),
          {:ok, conn} <- SSHClient.connect(ssh_config),
-         {:ok, result} <- AppInstaller.undeploy_app(conn, app, extract_path),
+         {:ok, result} <- AppInstaller.undeploy_app(conn, app, extract_path, host_architecture),
          {:ok, _} <- SSHClient.disconnect(conn),
          {:ok, _} <- unregister_mcp_server(app),
          {:ok, _} <- update_deployment_status(app, "pending") do
@@ -309,13 +322,13 @@ defmodule Elixihub.Deployment do
     end
   end
 
-  defp stop_existing_service_if_running(connection, app) do
+  defp stop_existing_service_if_running(connection, app, host_architecture \\ nil) do
     add_deployment_log(app, "Checking for existing running service...")
     
-    case AppInstaller.get_app_service_status(connection, app) do
+    case AppInstaller.get_app_service_status(connection, app, host_architecture) do
       {:ok, "active"} ->
         add_deployment_log(app, "Found active service. Stopping existing service before deployment...")
-        case AppInstaller.stop_app_service(connection, app) do
+        case AppInstaller.stop_app_service(connection, app, host_architecture) do
           {:ok, :stopped} ->
             add_deployment_log(app, "Successfully stopped existing service")
             # Wait a moment for the service to fully stop
@@ -329,7 +342,7 @@ defmodule Elixihub.Deployment do
       
       {:ok, "activating"} ->
         add_deployment_log(app, "Found service in activating state. Stopping...")
-        case AppInstaller.stop_app_service(connection, app) do
+        case AppInstaller.stop_app_service(connection, app, host_architecture) do
           {:ok, :stopped} ->
             add_deployment_log(app, "Successfully stopped activating service")
             :timer.sleep(3000)

@@ -259,7 +259,7 @@ defmodule ElixihubWeb.Admin.AppLive.DeploySimpleComponent do
       
       # Deploy the application
       IO.puts("Starting deployment with path: #{app.deploy_path}")
-      case Deployment.deploy_app(ssh_config, uploaded_file_path, app.deploy_path, app) do
+      case Deployment.deploy_app(ssh_config, uploaded_file_path, app.deploy_path, app, host.architecture) do
         {:ok, result} ->
           IO.puts("Deployment successful: #{inspect(result)}")
           Apps.update_app(app, %{

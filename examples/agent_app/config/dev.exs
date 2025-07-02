@@ -36,7 +36,7 @@ config :agent_app, :openai,
 # Note: Replace 192.168.0.XXX with the actual IP address of the machine running ElixiHub
 config :agent_app, :elixihub,
   jwt_secret: System.get_env("ELIXIHUB_JWT_SECRET", "dev_secret_key_32_chars_long_exactly_for_jwt_signing"),
-  elixihub_url: System.get_env("ELIXIHUB_URL", "http://192.168.0.1:4005")
+  elixihub_url: System.get_env("ELIXIHUB_URL", "http://localhost:4005")
 
 # MCP configuration
 config :agent_app, :mcp,

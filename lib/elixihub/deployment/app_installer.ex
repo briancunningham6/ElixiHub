@@ -18,12 +18,12 @@ defmodule Elixihub.Deployment.AppInstaller do
   - {:ok, installation_result} on success
   - {:error, reason} on failure
   """
-  def install_app(connection, %App{} = app, extract_path) do
+  def install_app(connection, %App{} = app, extract_path, host_architecture \\ nil) do
     with {:ok, app_type} <- detect_app_type(connection, extract_path),
          {:ok, _} <- prepare_installation_environment(connection, extract_path),
          {:ok, result} <- install_by_app_type(connection, app_type, extract_path, app),
-         {:ok, _} <- configure_app_service(connection, app, extract_path),
-         {:ok, _} <- start_app_service(connection, app) do
+         {:ok, _} <- configure_app_service(connection, app, extract_path, host_architecture),
+         {:ok, _} <- start_app_service(connection, app, host_architecture) do
       {:ok, %{
         app_type: app_type,
         install_path: extract_path,
@@ -60,10 +60,17 @@ defmodule Elixihub.Deployment.AppInstaller do
   @doc """
   Stops an application service.
   """
-  def stop_app_service(connection, %App{} = app) do
+  def stop_app_service(connection, %App{} = app, host_architecture \\ nil) do
     service_name = get_service_name(app)
     
-    case SSHClient.execute_command(connection, "sudo systemctl stop #{service_name}") do
+    stop_command = case host_architecture do
+      "MacOs(Apple Silicon)" ->
+        "launchctl stop #{service_name}"
+      _ ->
+        "sudo systemctl stop #{service_name}"
+    end
+    
+    case SSHClient.execute_command(connection, stop_command) do
       {:ok, {_, _, 0}} ->
         {:ok, :stopped}
       
@@ -78,15 +85,37 @@ defmodule Elixihub.Deployment.AppInstaller do
   @doc """
   Gets the status of an application service.
   """
-  def get_app_service_status(connection, %App{} = app) do
+  def get_app_service_status(connection, %App{} = app, host_architecture \\ nil) do
     service_name = get_service_name(app)
     
-    case SSHClient.execute_command(connection, "sudo systemctl is-active #{service_name}") do
+    status_command = case host_architecture do
+      "MacOs(Apple Silicon)" ->
+        "launchctl list | grep #{service_name} | awk '{print $1}'"
+      _ ->
+        "sudo systemctl is-active #{service_name}"
+    end
+    
+    case SSHClient.execute_command(connection, status_command) do
       {:ok, {status, _, 0}} ->
-        {:ok, String.trim(status)}
+        trimmed_status = String.trim(status)
+        # For launchctl, check if PID exists (means running)
+        normalized_status = case host_architecture do
+          "MacOs(Apple Silicon)" ->
+            if trimmed_status != "" and trimmed_status != "-", do: "active", else: "inactive"
+          _ ->
+            trimmed_status
+        end
+        {:ok, normalized_status}
       
       {:ok, {status, _, _}} ->
-        {:ok, String.trim(status)}
+        trimmed_status = String.trim(status)
+        normalized_status = case host_architecture do
+          "MacOs(Apple Silicon)" ->
+            if trimmed_status != "" and trimmed_status != "-", do: "active", else: "inactive"
+          _ ->
+            trimmed_status
+        end
+        {:ok, normalized_status}
       
       {:error, reason} ->
         {:error, "Failed to get service status: #{reason}"}
@@ -105,22 +134,35 @@ defmodule Elixihub.Deployment.AppInstaller do
   - {:ok, undeploy_result} on success
   - {:error, reason} on failure
   """
-  def undeploy_app(connection, %App{} = app, extract_path) do
+  def undeploy_app(connection, %App{} = app, extract_path, host_architecture \\ nil) do
     service_name = get_service_name(app)
-    service_path = "/etc/systemd/system/#{service_name}.service"
     
     IO.puts("Starting undeploy for app: #{app.name}")
     IO.puts("Service name: #{service_name}")
-    IO.puts("Service path: #{service_path}")
     IO.puts("Extract path: #{extract_path}")
+    IO.puts("Host architecture: #{host_architecture}")
     
-    undeployment_steps = [
-      {"Stop service", fn -> stop_app_service(connection, app) end},
-      {"Disable service", fn -> disable_app_service(connection, service_name) end},
-      {"Remove service file", fn -> remove_service_file(connection, service_path) end},
-      {"Reload systemd", fn -> reload_systemd(connection) end},
-      {"Remove application files", fn -> remove_app_files(connection, extract_path) end}
-    ]
+    undeployment_steps = case host_architecture do
+      "MacOs(Apple Silicon)" ->
+        plist_path = "/Library/LaunchDaemons/#{service_name}.plist"
+        IO.puts("Plist path: #{plist_path}")
+        [
+          {"Stop service", fn -> stop_app_service(connection, app, host_architecture) end},
+          {"Unload plist", fn -> unload_launchd_service(connection, service_name, plist_path) end},
+          {"Remove plist file", fn -> remove_service_file(connection, plist_path) end},
+          {"Remove application files", fn -> remove_app_files(connection, extract_path) end}
+        ]
+      _ ->
+        service_path = "/etc/systemd/system/#{service_name}.service"
+        IO.puts("Service path: #{service_path}")
+        [
+          {"Stop service", fn -> stop_app_service(connection, app, host_architecture) end},
+          {"Disable service", fn -> disable_app_service(connection, service_name) end},
+          {"Remove service file", fn -> remove_service_file(connection, service_path) end},
+          {"Reload systemd", fn -> reload_systemd(connection) end},
+          {"Remove application files", fn -> remove_app_files(connection, extract_path) end}
+        ]
+    end
     
     execute_undeployment_steps(undeployment_steps, [])
   end
@@ -145,10 +187,17 @@ defmodule Elixihub.Deployment.AppInstaller do
   @doc """
   Restarts an application service.
   """
-  def restart_app_service(connection, %App{} = app) do
+  def restart_app_service(connection, %App{} = app, host_architecture \\ nil) do
     service_name = get_service_name(app)
     
-    case SSHClient.execute_command(connection, "sudo systemctl restart #{service_name}") do
+    restart_command = case host_architecture do
+      "MacOs(Apple Silicon)" ->
+        "launchctl kickstart -k system/#{service_name}"
+      _ ->
+        "sudo systemctl restart #{service_name}"
+    end
+    
+    case SSHClient.execute_command(connection, restart_command) do
       {:ok, {_, _, 0}} ->
         {:ok, :restarted}
       
@@ -581,8 +630,18 @@ defmodule Elixihub.Deployment.AppInstaller do
     end
   end
 
-  defp configure_app_service(connection, app, extract_path) do
+  defp configure_app_service(connection, app, extract_path, host_architecture \\ nil) do
     service_name = get_service_name(app)
+    
+    case host_architecture do
+      "MacOs(Apple Silicon)" ->
+        configure_launchd_service(connection, app, extract_path, service_name)
+      _ ->
+        configure_systemd_service(connection, app, extract_path, service_name)
+    end
+  end
+
+  defp configure_systemd_service(connection, app, extract_path, service_name) do
     service_file = generate_systemd_service(app, extract_path, connection)
     service_path = "/etc/systemd/system/#{service_name}.service"
     
@@ -600,41 +659,76 @@ defmodule Elixihub.Deployment.AppInstaller do
     end
   end
 
-  defp check_service_status_with_retries(connection, app, retries) when retries > 0 do
-    case get_app_service_status(connection, app) do
+  defp configure_launchd_service(connection, app, extract_path, service_name) do
+    plist_content = generate_launchd_plist(app, extract_path, connection)
+    plist_path = "/Library/LaunchDaemons/#{service_name}.plist"
+    
+    # Write plist file using sudo
+    case write_service_file_with_sudo(connection, plist_content, plist_path) do
+      {:ok, _} ->
+        # Load the plist into launchd
+        execute_commands_sequence(connection, [
+          "sudo launchctl load #{plist_path}",
+          "sudo launchctl enable system/#{service_name}"
+        ])
+      
+      {:error, reason} ->
+        {:error, "Failed to configure launchd service: #{reason}"}
+    end
+  end
+
+  defp check_service_status_with_retries(connection, app, host_architecture, retries) when retries > 0 do
+    case get_app_service_status(connection, app, host_architecture) do
       {:ok, "active"} -> {:ok, "active"}
       {:ok, "activating"} -> 
         :timer.sleep(2000)
-        check_service_status_with_retries(connection, app, retries - 1)
+        check_service_status_with_retries(connection, app, host_architecture, retries - 1)
       {:ok, status} -> {:ok, status}
       {:error, reason} -> {:error, reason}
     end
   end
   
-  defp check_service_status_with_retries(connection, app, 0) do
-    get_app_service_status(connection, app)
+  defp check_service_status_with_retries(connection, app, host_architecture, 0) do
+    get_app_service_status(connection, app, host_architecture)
   end
 
-  defp start_app_service(connection, app) do
+  defp start_app_service(connection, app, host_architecture \\ nil) do
     service_name = get_service_name(app)
     
-    case SSHClient.execute_command(connection, "sudo systemctl start #{service_name}") do
+    start_command = case host_architecture do
+      "MacOs(Apple Silicon)" ->
+        "sudo launchctl start #{service_name}"
+      _ ->
+        "sudo systemctl start #{service_name}"
+    end
+    
+    case SSHClient.execute_command(connection, start_command) do
       {:ok, {_, _, 0}} ->
         # Wait longer for Elixir application to start properly
         :timer.sleep(5000)
         
         # Check status multiple times as Elixir apps can take time to start
-        case check_service_status_with_retries(connection, app, 3) do
+        case check_service_status_with_retries(connection, app, host_architecture, 3) do
           {:ok, "active"} -> {:ok, :started}
           {:ok, "activating"} -> 
             # Give it more time for activating state
             :timer.sleep(10000)
-            case get_app_service_status(connection, app) do
+            case get_app_service_status(connection, app, host_architecture) do
               {:ok, "active"} -> {:ok, :started}
-              {:ok, status} -> {:error, "Service is still #{status} after extended wait. Check logs with: journalctl -u #{service_name} -f"}
+              {:ok, status} -> 
+                log_command = case host_architecture do
+                  "MacOs(Apple Silicon)" -> "log show --predicate 'subsystem == \"#{service_name}\"' --last 1h"
+                  _ -> "journalctl -u #{service_name} -f"
+                end
+                {:error, "Service is still #{status} after extended wait. Check logs with: #{log_command}"}
               {:error, reason} -> {:error, "Failed to check service status: #{reason}"}
             end
-          {:ok, status} -> {:error, "Service started but status is: #{status}. Check logs with: journalctl -u #{service_name} -f"}
+          {:ok, status} -> 
+            log_command = case host_architecture do
+              "MacOs(Apple Silicon)" -> "log show --predicate 'subsystem == \"#{service_name}\"' --last 1h"
+              _ -> "journalctl -u #{service_name} -f"
+            end
+            {:error, "Service started but status is: #{status}. Check logs with: #{log_command}"}
           {:error, reason} -> {:error, "Failed to check service status: #{reason}"}
         end
       
@@ -732,6 +826,61 @@ defmodule Elixihub.Deployment.AppInstaller do
 
     [Install]
     WantedBy=multi-user.target
+    """
+  end
+
+  defp generate_launchd_plist(app, extract_path, connection) do
+    service_name = get_service_name(app)
+    start_command = get_start_command(extract_path, connection)
+    
+    # Get the username from SSH config (the user deploying the app)
+    deploy_user = get_deploy_user(connection)
+    
+    # Generate a default SECRET_KEY_BASE if not provided
+    secret_key_base = generate_secret_key_base()
+    
+    """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>#{service_name}</string>
+        <key>Program</key>
+        <string>#{start_command}</string>
+        <key>WorkingDirectory</key>
+        <string>#{extract_path}</string>
+        <key>UserName</key>
+        <string>#{deploy_user}</string>
+        <key>GroupName</key>
+        <string>#{deploy_user}</string>
+        <key>RunAtLoad</key>
+        <true/>
+        <key>KeepAlive</key>
+        <true/>
+        <key>EnvironmentVariables</key>
+        <dict>
+            <key>PORT</key>
+            <string>#{get_app_port(app)}</string>
+            <key>MIX_ENV</key>
+            <string>prod</string>
+            <key>PHX_SERVER</key>
+            <string>true</string>
+            <key>HOME</key>
+            <string>#{extract_path}</string>
+            <key>RELEASE_COOKIE</key>
+            <string>elixihub-#{service_name}</string>
+            <key>SECRET_KEY_BASE</key>
+            <string>#{secret_key_base}</string>
+            <key>PHX_HOST</key>
+            <string>localhost</string>
+        </dict>
+        <key>StandardOutPath</key>
+        <string>/var/log/#{service_name}.log</string>
+        <key>StandardErrorPath</key>
+        <string>/var/log/#{service_name}.log</string>
+    </dict>
+    </plist>
     """
   end
 
@@ -1075,6 +1224,24 @@ defmodule Elixihub.Deployment.AppInstaller do
       
       {:error, reason} ->
         {:error, "Failed to disable service: #{reason}"}
+    end
+  end
+
+  defp unload_launchd_service(connection, service_name, plist_path) do
+    case SSHClient.execute_command(connection, "sudo launchctl unload #{plist_path}") do
+      {:ok, {_, _, 0}} ->
+        {:ok, :unloaded}
+      
+      {:ok, {_, error, exit_code}} ->
+        # Don't fail if service doesn't exist or is already unloaded
+        if String.contains?(error, "No such file") or String.contains?(error, "not found") or String.contains?(error, "not loaded") do
+          {:ok, :already_unloaded}
+        else
+          {:error, "Failed to unload service (exit #{exit_code}): #{error}"}
+        end
+      
+      {:error, reason} ->
+        {:error, "Failed to unload service: #{reason}"}
     end
   end
 

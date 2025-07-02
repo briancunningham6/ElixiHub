@@ -24,6 +24,9 @@ defmodule ElixihubWeb.Admin.HostLive.FormComponent do
         <.input field={@form[:ssh_username]} type="text" label="SSH Username" placeholder="ubuntu" />
         <.input field={@form[:ssh_password]} type="password" label="SSH Password (optional)" />
         <.input field={@form[:ssh_port]} type="number" label="SSH Port" value="22" />
+        <.input field={@form[:architecture]} type="select" label="Host Architecture" 
+                options={[{"MacOs(Apple Silicon)", "MacOs(Apple Silicon)"}, {"ARM64(Raspberry Pi)", "ARM64(Raspberry Pi)"}]}
+                value="MacOs(Apple Silicon)" />
         <.input field={@form[:description]} type="textarea" label="Description" placeholder="Description of this host..." />
         
         <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4">

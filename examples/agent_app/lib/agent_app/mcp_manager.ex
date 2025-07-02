@@ -48,7 +48,8 @@ defmodule AgentApp.MCPManager do
         {:noreply, %{state | servers: servers, connections: connections}}
       
       {:error, reason} ->
-        Logger.warning("Failed to discover MCP servers: #{inspect(reason)}")
+        Logger.warning("Failed to discover MCP servers: #{inspect(reason)}. Will retry in 5 seconds...")
+        Process.send_after(self(), :discover_and_connect_servers, 5_000)
         {:noreply, state}
     end
   end

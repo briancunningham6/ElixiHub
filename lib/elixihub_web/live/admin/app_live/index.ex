@@ -114,9 +114,9 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
 
   # Private function to perform undeployment in background
   defp perform_undeployment(app, user, parent_pid) do
-    case get_ssh_config(app) do
-      {:ok, ssh_config} ->
-        case Elixihub.Deployment.undeploy_app(app, ssh_config) do
+    case get_ssh_config_and_architecture(app) do
+      {:ok, ssh_config, host_architecture} ->
+        case Elixihub.Deployment.undeploy_app(app, ssh_config, host_architecture) do
           {:ok, result} ->
             send(parent_pid, {:undeployment_complete, app.id, :success, result})
           {:error, reason} ->
@@ -156,13 +156,37 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
     Map.put(ssh_config, :private_key, private_key)
   end
 
+  defp get_ssh_config_and_architecture(app) do
+    cond do
+      # Prefer host configuration (used in modern deployments)
+      app.host ->
+        ssh_config = Elixihub.Hosts.host_to_ssh_config(app.host)
+        {:ok, ssh_config, app.host.architecture}
+      
+      # Fallback to node configuration (legacy) - assume ARM64
+      app.node ->
+        ssh_config = %{
+          host: app.node.host,
+          port: app.node.port || 22,
+          username: app.node.username,
+          password: app.node.password
+        }
+        |> maybe_add_private_key(app.node.private_key)
+        
+        {:ok, ssh_config, "ARM64(Raspberry Pi)"}  # Default for legacy nodes
+      
+      true ->
+        {:error, "No host or node configuration found"}
+    end
+  end
+
   # Private function to perform undeployment followed by deletion
   defp perform_undeploy_and_delete(app, user, parent_pid) do
     app_name = app.name
     
-    case get_ssh_config(app) do
-      {:ok, ssh_config} ->
-        case Elixihub.Deployment.undeploy_app(app, ssh_config) do
+    case get_ssh_config_and_architecture(app) do
+      {:ok, ssh_config, host_architecture} ->
+        case Elixihub.Deployment.undeploy_app(app, ssh_config, host_architecture) do
           {:ok, _undeploy_result} ->
             # Undeployment successful, now delete the app record
             case Elixihub.Apps.delete_app(app) do

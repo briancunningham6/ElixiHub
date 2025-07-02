@@ -170,6 +170,7 @@ defmodule ElixihubWeb.Admin.HostLive.Index do
                   <div class="text-sm text-gray-600 mt-1">
                     <div>IP Address: <span class="font-mono"><%= host.ip_address %></span></div>
                     <div>SSH Port: <span class="font-mono"><%= host.ssh_port %></span></div>
+                    <div>Architecture: <span class="font-medium"><%= host.architecture %></span></div>
                   </div>
                   <div class="text-xs text-gray-400 mt-1">
                     Added: <%= Calendar.strftime(host.inserted_at, "%B %d, %Y at %I:%M %p") %>
