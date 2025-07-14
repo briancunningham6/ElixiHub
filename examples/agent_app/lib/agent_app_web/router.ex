@@ -72,6 +72,7 @@ defmodule AgentAppWeb.Router do
 
   # Enable LiveDashboard in development
   if Application.compile_env(:agent_app, :dev_routes) do
+    # Import LiveDashboard and Ecto dev routes
     import Phoenix.LiveDashboard.Router
 
     scope "/dev" do

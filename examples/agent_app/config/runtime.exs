@@ -12,18 +12,23 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
-  host = System.get_env("PHX_HOST") || "192.168.0.188"
+  host = System.get_env("PHX_HOST") || "localhost"
   port = String.to_integer(System.get_env("PORT") || "4003")
 
   config :agent_app, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :agent_app, AgentAppWeb.Endpoint,
-    url: [host: host, port: 443, scheme: "https"],
+    url: [host: host, port: port, scheme: "http"],
     http: [
-      ip: {192, 168, 0, 188},
+      ip: {0, 0, 0, 0},  # Listen on all interfaces
       port: port
     ],
-    secret_key_base: secret_key_base
+    secret_key_base: secret_key_base,
+    check_origin: [
+      "http://#{host}:#{port}",
+      "http://localhost:#{port}",
+      "http://127.0.0.1:#{port}"
+    ]
 
   # OpenAI configuration with better error handling
   openai_api_key = System.get_env("OPENAI_API_KEY")
@@ -38,7 +43,7 @@ if config_env() == :prod do
 
   # ElixiHub JWT configuration with defaults
   elixihub_jwt_secret = System.get_env("ELIXIHUB_JWT_SECRET") || "dev_secret_key_32_chars_long_exactly_for_jwt_signing"
-  elixihub_url = System.get_env("ELIXIHUB_URL") || "http://192.168.0.1:4005"
+  elixihub_url = System.get_env("ELIXIHUB_URL") || "http://localhost:4005"
   
   config :agent_app, :elixihub,
     jwt_secret: elixihub_jwt_secret,

@@ -27,8 +27,8 @@ defmodule AgentAppWeb.PageController do
       elixihub_config = Application.get_env(:agent_app, :elixihub)
       elixihub_url = elixihub_config[:elixihub_url] || "http://localhost:4005"
       
-      # Hardcode the Agent app URL for now since endpoint URL is not working correctly
-      agent_url = "http://192.168.0.188:4003"
+      # Build the Agent app URL dynamically from endpoint configuration
+      agent_url = AgentAppWeb.Endpoint.url()
       return_url = "#{agent_url}/auth/sso_callback"
       sso_url = "#{elixihub_url}/sso/auth?return_to=#{URI.encode(return_url)}"
       

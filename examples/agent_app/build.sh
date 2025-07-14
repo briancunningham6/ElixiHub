@@ -69,17 +69,23 @@ The ElixiHub deployment system will automatically:
 1. Build the release on the target architecture
 2. Install dependencies 
 3. Compile assets
-4. Create the systemd service
+4. Create the service (systemd/launchd)
 5. Start the application
 
 ## Environment Variables Required:
 - OPENAI_API_KEY: Your OpenAI API key
-- ELIXIHUB_JWT_SECRET: JWT secret from ElixiHub
-- ELIXIHUB_URL: URL of your ElixiHub instance
-- HELLO_WORLD_MCP_URL: URL of hello world MCP endpoint
+- ELIXIHUB_JWT_SECRET: JWT secret from ElixiHub (auto-generated if not provided)
+- ELIXIHUB_URL: URL of your ElixiHub instance (defaults to http://localhost:4005)
+- HELLO_WORLD_MCP_URL: URL of hello world MCP endpoint (defaults to http://localhost:4001/api/mcp)
 
 ## Port Configuration:
-The application will run on IP 192.168.0.188:4003 by default.
+- Default port: 4003
+- The port is configurable via the PORT environment variable
+- The application will listen on all interfaces (0.0.0.0)
+
+## SECRET_KEY_BASE:
+- Automatically generated and stored during deployment
+- Consistent across restarts for session management
 EOF
 
 # Create the tar file
@@ -106,10 +112,11 @@ if [ -f "${TAR_FILE}" ]; then
     echo "5. Click Deploy"
     echo ""
     echo "Environment variables needed:"
-    echo "- OPENAI_API_KEY: Your OpenAI API key"
-    echo "- ELIXIHUB_JWT_SECRET: JWT secret from ElixiHub"
-    echo "- ELIXIHUB_URL: URL of your ElixiHub instance"
-    echo "- HELLO_WORLD_MCP_URL: URL of hello world MCP endpoint"
+    echo "- OPENAI_API_KEY: Your OpenAI API key (required for chat functionality)"
+    echo "- ELIXIHUB_JWT_SECRET: JWT secret from ElixiHub (auto-generated if not set)"
+    echo "- ELIXIHUB_URL: URL of your ElixiHub instance (defaults to http://localhost:4005)"
+    echo "- HELLO_WORLD_MCP_URL: URL of hello world MCP endpoint (defaults to http://localhost:4001/api/mcp)"
+    echo "- PORT: Application port (defaults to 4003)"
 else
     echo "❌ Failed to create ${TAR_FILE}"
     exit 1

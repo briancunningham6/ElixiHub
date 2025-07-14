@@ -1,15 +1,21 @@
 import Config
 
 config :agent_app, AgentAppWeb.Endpoint,
-  url: [host: "192.168.0.188", port: 4003],
+  url: [host: "localhost", port: 4003],
   http: [ip: {0, 0, 0, 0}, port: 4003],
-  check_origin: false,
+  check_origin: [
+    "http://localhost:4003",
+    "http://127.0.0.1:4003"
+  ],
   code_reloader: true,
   debug_errors: true,
   secret_key_base: "agent_app_dev_secret_key_base_1234567890123456789012345678901234567890",
   watchers: [
     tailwind: {Tailwind, :install_and_run, [:agent_app, ~w(--watch)]}
   ]
+
+# Enable dev routes for dashboard and mailbox
+config :agent_app, dev_routes: true
 
 config :agent_app, AgentAppWeb.Endpoint,
   live_reload: [

@@ -10,7 +10,7 @@ defmodule Elixihub.Deployment.SSHClient do
 
   @doc """
   Connects to a remote server via SSH.
-  
+
   ## Parameters
   - config: SSH configuration map
     - host: Target server hostname/IP
@@ -19,7 +19,7 @@ defmodule Elixihub.Deployment.SSHClient do
     - password: SSH password (optional if using key)
     - private_key: SSH private key path (optional)
     - timeout: Connection timeout in ms (default: 30000)
-  
+
   ## Returns
   - {:ok, connection} on success
   - {:error, reason} on failure
@@ -38,11 +38,11 @@ defmodule Elixihub.Deployment.SSHClient do
         case :ssh.connect(host, port, ssh_opts, timeout) do
           {:ok, connection} ->
             {:ok, connection}
-          
+
           {:error, reason} ->
             {:error, "SSH connection failed: #{inspect(reason)}"}
         end
-      
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -60,12 +60,12 @@ defmodule Elixihub.Deployment.SSHClient do
 
   @doc """
   Executes a command on the remote server.
-  
+
   ## Parameters
   - connection: SSH connection
   - command: Command to execute
   - opts: Options (timeout, etc.)
-  
+
   ## Returns
   - {:ok, {stdout, stderr, exit_code}} on success
   - {:error, reason} on failure
@@ -73,20 +73,24 @@ defmodule Elixihub.Deployment.SSHClient do
   def execute_command(connection, command, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
     command_charlist = String.to_charlist(command)
-    
+
+    IO.puts("Executing command: #{command} with timeout #{timeout}ms")
+
     case :ssh_connection.session_channel(connection, timeout) do
       {:ok, channel} ->
         case :ssh_connection.exec(connection, channel, command_charlist, timeout) do
           :success ->
+            IO.puts("Command executed successfully: #{command}")
             result = collect_response(connection, channel, "", "", nil, timeout)
             :ssh_connection.close(connection, channel)
             result
-          
+
           :failure ->
+            IO.puts("Command execution failed: #{command}")
             :ssh_connection.close(connection, channel)
             {:error, "Command execution failed"}
         end
-      
+
       {:error, reason} ->
         {:error, "Failed to open SSH channel: #{inspect(reason)}"}
     end
@@ -110,12 +114,12 @@ defmodule Elixihub.Deployment.SSHClient do
 
   @doc """
   Uploads a file to the remote server using SFTP.
-  
+
   ## Parameters
   - connection: SSH connection
   - local_path: Local file path
   - remote_path: Remote destination path
-  
+
   ## Returns
   - {:ok, remote_path} on success
   - {:error, reason} on failure
@@ -126,14 +130,14 @@ defmodule Elixihub.Deployment.SSHClient do
         result = case :ssh_sftp.write_file(sftp_channel, String.to_charlist(remote_path), File.read!(local_path)) do
           :ok ->
             {:ok, remote_path}
-          
+
           {:error, reason} ->
             {:error, "File upload failed: #{inspect(reason)}"}
         end
-        
+
         :ssh_sftp.stop_channel(sftp_channel)
         result
-      
+
       {:error, reason} ->
         {:error, "Failed to start SFTP channel: #{inspect(reason)}"}
     end
@@ -141,12 +145,12 @@ defmodule Elixihub.Deployment.SSHClient do
 
   @doc """
   Downloads a file from the remote server using SFTP.
-  
+
   ## Parameters
   - connection: SSH connection
   - remote_path: Remote file path
   - local_path: Local destination path
-  
+
   ## Returns
   - {:ok, local_path} on success
   - {:error, reason} on failure
@@ -160,14 +164,14 @@ defmodule Elixihub.Deployment.SSHClient do
               :ok -> {:ok, local_path}
               {:error, reason} -> {:error, "Failed to write local file: #{inspect(reason)}"}
             end
-          
+
           {:error, reason} ->
             {:error, "File download failed: #{inspect(reason)}"}
         end
-        
+
         :ssh_sftp.stop_channel(sftp_channel)
         result
-      
+
       {:error, reason} ->
         {:error, "Failed to start SFTP channel: #{inspect(reason)}"}
     end
@@ -197,7 +201,7 @@ defmodule Elixihub.Deployment.SSHClient do
     case execute_command(connection, "stat -c '%a' #{path}") do
       {:ok, {permissions, _, 0}} ->
         {:ok, String.trim(permissions)}
-      
+
       {:ok, {_, error, exit_code}} ->
         {:error, "Failed to get permissions (exit #{exit_code}): #{error}"}
     end
@@ -210,7 +214,7 @@ defmodule Elixihub.Deployment.SSHClient do
     case execute_command(connection, "chmod #{mode} #{path}") do
       {:ok, {_, _, 0}} ->
         {:ok, :permissions_set}
-      
+
       {:ok, {_, error, exit_code}} ->
         {:error, "Failed to set permissions (exit #{exit_code}): #{error}"}
     end
@@ -229,11 +233,11 @@ defmodule Elixihub.Deployment.SSHClient do
       Map.has_key?(config, :private_key) ->
         user_dir = config.private_key |> Path.dirname() |> String.to_charlist()
         [{:user_dir, user_dir} | base_opts]
-      
+
       Map.has_key?(config, :password) and config.password != "" ->
         password = String.to_charlist(config.password)
         [{:password, password} | base_opts]
-      
+
       true ->
         # For connection tests without authentication, set auth_methods to none
         [{:auth_methods, ['none']} | base_opts]
@@ -244,13 +248,13 @@ defmodule Elixihub.Deployment.SSHClient do
     receive do
       {:ssh_cm, ^connection, {:data, ^channel, 0, data}} ->
         collect_response(connection, channel, stdout <> to_string(data), stderr, exit_code, timeout)
-      
+
       {:ssh_cm, ^connection, {:data, ^channel, 1, data}} ->
         collect_response(connection, channel, stdout, stderr <> to_string(data), exit_code, timeout)
-      
+
       {:ssh_cm, ^connection, {:exit_status, ^channel, status}} ->
         collect_response(connection, channel, stdout, stderr, status, timeout)
-      
+
       {:ssh_cm, ^connection, {:closed, ^channel}} ->
         {:ok, {stdout, stderr, exit_code || 0}}
     after
@@ -263,10 +267,10 @@ defmodule Elixihub.Deployment.SSHClient do
     cond do
       is_nil(config.host) or config.host == "" ->
         {:error, "SSH host is required"}
-      
+
       is_nil(config.username) or config.username == "" ->
         {:error, "SSH username is required"}
-      
+
       true ->
         {:ok, config}
     end

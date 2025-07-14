@@ -9,7 +9,8 @@ defmodule AgentApp.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      deps: deps()
+      deps: deps(),
+      releases: releases()
     ]
   end
 
@@ -56,6 +57,16 @@ defmodule AgentApp.MixProject do
         "tailwind agent_app --minify",
         "esbuild agent_app --minify",
         "phx.digest"
+      ]
+    ]
+  end
+
+  defp releases do
+    [
+      agent_app: [
+        include_executables_for: [:unix],
+        applications: [runtime_tools: :permanent],
+        steps: [:assemble, :tar]
       ]
     ]
   end
