@@ -1,0 +1,97 @@
+<.header>
+  Task Manager
+  <:subtitle>Manage your tasks efficiently</:subtitle>
+  <:actions>
+    <.link patch={~p"/app/tasks/new"}>
+      <.button>New Task</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<div class="mb-4">
+  <div class="flex space-x-2">
+    <.button 
+      phx-click="filter" 
+      phx-value-status="all"
+      class={if @filter_status == "all", do: "bg-blue-600", else: "bg-gray-400"}
+    >
+      All
+    </.button>
+    <.button 
+      phx-click="filter" 
+      phx-value-status="pending"
+      class={if @filter_status == "pending", do: "bg-blue-600", else: "bg-gray-400"}
+    >
+      Pending
+    </.button>
+    <.button 
+      phx-click="filter" 
+      phx-value-status="in_progress"
+      class={if @filter_status == "in_progress", do: "bg-blue-600", else: "bg-gray-400"}
+    >
+      In Progress
+    </.button>
+    <.button 
+      phx-click="filter" 
+      phx-value-status="completed"
+      class={if @filter_status == "completed", do: "bg-blue-600", else: "bg-gray-400"}
+    >
+      Completed
+    </.button>
+  </div>
+</div>
+
+<.table
+  id="tasks"
+  rows={@tasks}
+  row_click={fn task -> JS.navigate(~p"/app/tasks/#{task}") end}
+>
+  <:col :let={task} label="Title"><%= task.title %></:col>
+  <:col :let={task} label="Status">
+    <.badge color={status_color(task.status)}><%= task.status %></.badge>
+  </:col>
+  <:col :let={task} label="Priority">
+    <.badge color={priority_color(task.priority)}><%= task.priority %></.badge>
+  </:col>
+  <:col :let={task} label="Due Date">
+    <%= if task.due_date, do: Calendar.strftime(task.due_date, "%Y-%m-%d"), else: "-" %>
+  </:col>
+  <:col :let={task} label="Actions">
+    <div class="flex space-x-2">
+      <.link patch={~p"/app/tasks/#{task}/edit"}>
+        <.button size="sm">Edit</.button>
+      </.link>
+      <%= if task.status != "completed" do %>
+        <.button 
+          phx-click="complete" 
+          phx-value-id={task.id}
+          data-confirm="Mark this task as completed?"
+          size="sm"
+          class="bg-green-600 hover:bg-green-700"
+        >
+          Complete
+        </.button>
+      <% end %>
+      <.button 
+        phx-click="delete" 
+        phx-value-id={task.id}
+        data-confirm="Are you sure?"
+        size="sm"
+        class="bg-red-600 hover:bg-red-700"
+      >
+        Delete
+      </.button>
+    </div>
+  </:col>
+</.table>
+
+<.modal :if={@live_action in [:new, :edit]} id="task-modal" show on_cancel={JS.navigate(~p"/app")}>
+  <.live_component
+    module={TaskManagerWeb.TaskLive.FormComponent}
+    id={@task.id || :new}
+    title={@page_title}
+    action={@live_action}
+    task={@task}
+    navigate={~p"/app"}
+  />
+</.modal>

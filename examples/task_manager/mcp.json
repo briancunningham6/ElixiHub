@@ -1,0 +1,145 @@
+{
+  "name": "task_manager",
+  "version": "1.0.0",
+  "description": "Task management tools for AI agents",
+  "url": "http://localhost:4001/mcp",
+  "tools": [
+    {
+      "name": "list_tasks",
+      "description": "List tasks for the current user",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_progress", "completed", "cancelled"],
+            "description": "Filter tasks by status"
+          }
+        }
+      }
+    },
+    {
+      "name": "create_task",
+      "description": "Create a new task",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Task title"
+          },
+          "description": {
+            "type": "string",
+            "description": "Task description"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "urgent"],
+            "description": "Task priority"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Due date in ISO 8601 format"
+          },
+          "assignee_id": {
+            "type": "string",
+            "description": "ID of the user to assign the task to"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Task tags"
+          }
+        },
+        "required": ["title"]
+      }
+    },
+    {
+      "name": "update_task",
+      "description": "Update an existing task",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "ID of the task to update"
+          },
+          "title": {
+            "type": "string",
+            "description": "Task title"
+          },
+          "description": {
+            "type": "string",
+            "description": "Task description"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_progress", "completed", "cancelled"],
+            "description": "Task status"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "urgent"],
+            "description": "Task priority"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Due date in ISO 8601 format"
+          },
+          "assignee_id": {
+            "type": "string",
+            "description": "ID of the user to assign the task to"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Task tags"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "delete_task",
+      "description": "Delete a task",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "ID of the task to delete"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "complete_task",
+      "description": "Mark a task as completed",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "ID of the task to complete"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "get_task_stats",
+      "description": "Get task statistics",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ]
+}
