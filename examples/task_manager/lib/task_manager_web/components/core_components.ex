@@ -209,6 +209,15 @@ defmodule TaskManagerWeb.CoreComponents do
 
   slot :inner_block
 
+  def input(%{field: %Phoenix.HTML.FormField{} = field} = assigns) do
+    assigns
+    |> assign(field: nil, id: assigns.id || field.id)
+    |> assign(:errors, Enum.map(field.errors, &translate_error(&1)))
+    |> assign_new(:name, fn -> if assigns.multiple, do: field.name <> "[]", else: field.name end)
+    |> assign_new(:value, fn -> field.value end)
+    |> input()
+  end
+
   def input(%{type: "select"} = assigns) do
     ~H"""
     <div>
@@ -239,7 +248,7 @@ defmodule TaskManagerWeb.CoreComponents do
         name={@name}
         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
         {@rest}
-      ><%= @value %></textarea>
+      ><%= Phoenix.HTML.Form.normalize_value("textarea", @value) %></textarea>
       <.error :for={msg <- @errors}><%= msg %></.error>
     </div>
     """
@@ -253,7 +262,7 @@ defmodule TaskManagerWeb.CoreComponents do
         type={@type}
         name={@name}
         id={@id}
-        value={@value}
+        value={Phoenix.HTML.Form.normalize_value(@type, @value)}
         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
         {@rest}
       />
@@ -288,17 +297,20 @@ defmodule TaskManagerWeb.CoreComponents do
     ~H"""
     <div
       id={@id}
-      phx-mounted={@show && "show"}
-      phx-remove={hide_modal(@id)}
-      data-cancel={JS.exec(@on_cancel, "phx-remove")}
-      class="relative z-50 hidden"
+      class={["fixed inset-0 z-50 overflow-y-auto", @show && "block" || "hidden"]}
     >
-      <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity" />
-      <div class="fixed inset-0 overflow-y-auto">
-        <div class="flex min-h-full items-center justify-center p-4">
-          <div class="relative bg-white rounded-lg p-6 shadow-xl">
-            <%= render_slot(@inner_block) %>
+      <div class="fixed inset-0 bg-black bg-opacity-50"></div>
+      <div class="flex min-h-full items-center justify-center p-4">
+        <div class="relative bg-white rounded-lg p-6 shadow-xl max-w-lg w-full">
+          <div class="absolute top-2 right-2">
+            <button type="button" phx-click={@on_cancel} class="text-gray-400 hover:text-gray-600">
+              <span class="sr-only">Close</span>
+              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
+          <%= render_slot(@inner_block) %>
         </div>
       </div>
     </div>
@@ -317,9 +329,17 @@ defmodule TaskManagerWeb.CoreComponents do
 
   defp translate_error({msg, opts}) do
     Enum.reduce(opts, msg, fn {key, value}, acc ->
-      String.replace(acc, "%{#{key}}", to_string(value))
+      String.replace(acc, "%{#{key}}", stringify_error_value(value))
     end)
   end
+  
+  defp stringify_error_value(value) when is_binary(value), do: value
+  defp stringify_error_value(value) when is_atom(value), do: Atom.to_string(value)
+  defp stringify_error_value(value) when is_integer(value), do: Integer.to_string(value)
+  defp stringify_error_value(value) when is_float(value), do: Float.to_string(value)
+  defp stringify_error_value(value) when is_tuple(value), do: inspect(value)
+  defp stringify_error_value(value) when is_list(value), do: inspect(value)
+  defp stringify_error_value(value), do: inspect(value)
   
   defp get_field_errors(%Ecto.Changeset{} = changeset, field_name) do
     changeset.errors

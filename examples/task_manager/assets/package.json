@@ -1,0 +1,21 @@
+{
+  "name": "task-manager",
+  "version": "1.0.0",
+  "description": "Task Manager Phoenix LiveView Application",
+  "main": "js/app.js",
+  "scripts": {
+    "deploy": "NODE_ENV=production tailwind --postcss --minify --input=css/app.css --output=../priv/static/assets/app.css",
+    "watch": "tailwind --postcss --watch --input=css/app.css --output=../priv/static/assets/app.css"
+  },
+  "dependencies": {
+    "phoenix": "file:../deps/phoenix",
+    "phoenix_html": "file:../deps/phoenix_html",
+    "phoenix_live_view": "file:../deps/phoenix_live_view"
+  },
+  "devDependencies": {
+    "@tailwindcss/forms": "^0.5.3",
+    "tailwindcss": "^3.3.0",
+    "autoprefixer": "^10.4.14",
+    "postcss": "^8.4.24"
+  }
+}

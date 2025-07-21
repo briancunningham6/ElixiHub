@@ -44,7 +44,7 @@
 <.table
   id="tasks"
   rows={@tasks}
-  row_click={fn task -> JS.navigate(~p"/app/tasks/#{task}") end}
+  row_click={fn task -> JS.patch(~p"/app/tasks/#{task}/edit") end}
 >
   <:col :let={task} label="Title"><%= task.title %></:col>
   <:col :let={task} label="Status">
@@ -59,14 +59,14 @@
   <:col :let={task} label="Actions">
     <div class="flex space-x-2">
       <.link patch={~p"/app/tasks/#{task}/edit"}>
-        <.button size="sm">Edit</.button>
+        <.button class="text-sm">Edit</.button>
       </.link>
       <%= if task.status != "completed" do %>
         <.button 
           phx-click="complete" 
           phx-value-id={task.id}
           data-confirm="Mark this task as completed?"
-          size="sm"
+          class="text-sm"
           class="bg-green-600 hover:bg-green-700"
         >
           Complete
@@ -76,7 +76,7 @@
         phx-click="delete" 
         phx-value-id={task.id}
         data-confirm="Are you sure?"
-        size="sm"
+        class="text-sm"
         class="bg-red-600 hover:bg-red-700"
       >
         Delete
@@ -85,13 +85,13 @@
   </:col>
 </.table>
 
-<.modal :if={@live_action in [:new, :edit]} id="task-modal" show on_cancel={JS.navigate(~p"/app")}>
+<.modal :if={@live_action in [:new, :edit]} id="task-modal" show on_cancel={JS.patch(~p"/app")}>
   <.live_component
     module={TaskManagerWeb.TaskLive.FormComponent}
     id={@task.id || :new}
     title={@page_title}
     action={@live_action}
     task={@task}
-    navigate={~p"/app"}
+    patch={~p"/app"}
   />
 </.modal>

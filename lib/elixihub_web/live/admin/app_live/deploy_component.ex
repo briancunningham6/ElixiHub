@@ -19,6 +19,7 @@ defmodule ElixihubWeb.Admin.AppLive.DeployComponent do
         <.input field={@form[:ssh_username]} type="text" label="SSH Username" placeholder="ubuntu" required />
         <.input field={@form[:ssh_password]} type="password" label="SSH Password" />
         <.input field={@form[:deploy_path]} type="text" label="Deploy Path" placeholder="/opt/apps/myapp" required />
+        <.input field={@form[:deploy_as_service]} type="checkbox" label="Deploy as System Service" />
         
         <div class="space-y-2">
           <label class="block text-sm font-medium text-gray-700">Tar File</label>
@@ -127,12 +128,15 @@ defmodule ElixihubWeb.Admin.AppLive.DeployComponent do
 
     case uploaded_files do
       [tar_path] ->
+        deploy_as_service = app_params["deploy_as_service"] == "true"
+        
         ssh_config = %{
           host: app_params["ssh_host"],
           port: String.to_integer(app_params["ssh_port"] || "22"),
           username: app_params["ssh_username"],
           password: app_params["ssh_password"],
-          deploy_path: app_params["deploy_path"]
+          deploy_path: app_params["deploy_path"],
+          deploy_as_service: deploy_as_service
         }
 
         # Update app with SSH config
@@ -140,7 +144,8 @@ defmodule ElixihubWeb.Admin.AppLive.DeployComponent do
           ssh_host: ssh_config.host,
           ssh_port: ssh_config.port,
           ssh_username: ssh_config.username,
-          deploy_path: ssh_config.deploy_path
+          deploy_path: ssh_config.deploy_path,
+          deploy_as_service: deploy_as_service
         })
 
         # Start deployment in background

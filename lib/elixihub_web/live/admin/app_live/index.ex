@@ -300,6 +300,68 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
   end
 
   @impl true
+  def handle_event("start_service", %{"id" => id}, socket) do
+    app = Apps.get_app!(id) |> Elixihub.Repo.preload([:node, :host])
+    
+    case perform_service_action(app, :start) do
+      {:ok, _result} ->
+        {:noreply, socket |> put_flash(:info, "Service #{app.name} started successfully")}
+      {:error, reason} ->
+        {:noreply, socket |> put_flash(:error, "Failed to start service: #{reason}")}
+    end
+  end
+
+  @impl true
+  def handle_event("stop_service", %{"id" => id}, socket) do
+    app = Apps.get_app!(id) |> Elixihub.Repo.preload([:node, :host])
+    
+    case perform_service_action(app, :stop) do
+      {:ok, _result} ->
+        {:noreply, socket |> put_flash(:info, "Service #{app.name} stopped successfully")}
+      {:error, reason} ->
+        {:noreply, socket |> put_flash(:error, "Failed to stop service: #{reason}")}
+    end
+  end
+
+  @impl true
+  def handle_event("restart_service", %{"id" => id}, socket) do
+    app = Apps.get_app!(id) |> Elixihub.Repo.preload([:node, :host])
+    
+    case perform_service_action(app, :restart) do
+      {:ok, _result} ->
+        {:noreply, socket |> put_flash(:info, "Service #{app.name} restarted successfully")}
+      {:error, reason} ->
+        {:noreply, socket |> put_flash(:error, "Failed to restart service: #{reason}")}
+    end
+  end
+
+  defp perform_service_action(app, action) do
+    case get_ssh_config_and_architecture(app) do
+      {:ok, ssh_config, host_architecture} ->
+        case Elixihub.Deployment.SSHClient.connect(ssh_config) do
+          {:ok, conn} ->
+            result = case action do
+              :start ->
+                Elixihub.Deployment.AppInstaller.start_app_service(conn, app, app.deploy_path, host_architecture)
+              :stop ->
+                Elixihub.Deployment.AppInstaller.stop_app_service(conn, app, host_architecture)
+              :restart ->
+                Elixihub.Deployment.AppInstaller.restart_app_service(conn, app, host_architecture)
+            end
+            
+            Elixihub.Deployment.SSHClient.disconnect(conn)
+            result
+          
+          {:error, reason} ->
+            {:error, "Failed to connect to host: #{reason}"}
+        end
+      
+      {:error, reason} ->
+        {:error, "SSH configuration error: #{reason}"}
+    end
+  end
+
+  @impl true
   def render(assigns) do
     ~H"""
     <div class="min-h-screen bg-gray-50">
@@ -442,6 +504,32 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
                   >
                     Undeploying...
                   </span>
+                  
+                  <!-- Service Management Buttons -->
+                  <div :if={app.deployment_status == "deployed" && app.deploy_as_service} class="flex items-center space-x-1">
+                    <button
+                      phx-click="start_service"
+                      phx-value-id={app.id}
+                      class="text-green-600 hover:text-green-900 text-sm font-medium px-2 py-1 border border-green-300 rounded"
+                    >
+                      Start
+                    </button>
+                    <button
+                      phx-click="stop_service"
+                      phx-value-id={app.id}
+                      data-confirm="Are you sure you want to stop this service?"
+                      class="text-red-600 hover:text-red-900 text-sm font-medium px-2 py-1 border border-red-300 rounded"
+                    >
+                      Stop
+                    </button>
+                    <button
+                      phx-click="restart_service"
+                      phx-value-id={app.id}
+                      class="text-blue-600 hover:text-blue-900 text-sm font-medium px-2 py-1 border border-blue-300 rounded"
+                    >
+                      Restart
+                    </button>
+                  </div>
                   
                   <.link
                     navigate={~p"/admin/apps/#{app}/roles"}

@@ -12,113 +12,124 @@ defmodule TaskManagerWeb.TaskLive.FormComponent do
         <:subtitle>Use this form to manage task records in your database.</:subtitle>
       </.header>
 
-      <.form
+      <.simple_form
         for={@form}
         id="task-form"
         phx-target={@myself}
         phx-change="validate"
         phx-submit="save"
       >
-        <div class="space-y-6">
-          <.input name="task[title]" type="text" label="Title" value={@form.data.title} />
-          <.input name="task[description]" type="textarea" label="Description" value={@form.data.description} />
-          <.input
-            name="task[status]"
-            type="select"
-            label="Status"
-            value={@form.data.status}
-            prompt="Choose a status"
-            options={[
-              {"Pending", "pending"},
-              {"In Progress", "in_progress"},
-              {"Completed", "completed"},
-              {"Cancelled", "cancelled"}
-            ]}
-          />
-          <.input
-            name="task[priority]"
-            type="select"
-            label="Priority"
-            value={@form.data.priority}
-            prompt="Choose a priority"
-            options={[
-              {"Low", "low"},
-              {"Medium", "medium"},
-              {"High", "high"},
-              {"Urgent", "urgent"}
-            ]}
-          />
-          <.input name="task[due_date]" type="datetime-local" label="Due Date" value={@form.data.due_date} />
-          <.input name="task[assignee_id]" type="text" label="Assignee ID" value={@form.data.assignee_id} />
-          <.input name="task[tags]" type="text" label="Tags (comma separated)" value={format_tags(@form.data.tags)} />
-          
-          <div class="flex items-center justify-end space-x-4">
-            <.button phx-disable-with="Saving...">Save Task</.button>
-          </div>
-        </div>
-      </.form>
+        <.input field={@form[:title]} type="text" label="Title" />
+        <.input field={@form[:description]} type="textarea" label="Description" />
+        <.input
+          field={@form[:status]}
+          type="select"
+          label="Status"
+          prompt="Choose a status"
+          options={[
+            {"Pending", "pending"},
+            {"In Progress", "in_progress"},
+            {"Completed", "completed"},
+            {"Cancelled", "cancelled"}
+          ]}
+        />
+        <.input
+          field={@form[:priority]}
+          type="select"
+          label="Priority"
+          prompt="Choose a priority"
+          options={[
+            {"Low", "low"},
+            {"Medium", "medium"},
+            {"High", "high"},
+            {"Urgent", "urgent"}
+          ]}
+        />
+        <.input field={@form[:due_date]} type="datetime-local" label="Due Date" />
+        <.input field={@form[:assignee_id]} type="text" label="Assignee ID" />
+        <.input field={@form[:tags]} type="text" label="Tags (comma separated)" />
+        
+        <:actions>
+          <.button phx-disable-with="Saving...">Save Task</.button>
+        </:actions>
+      </.simple_form>
     </div>
     """
   end
 
   @impl true
   def update(%{task: task} = assigns, socket) do
-    changeset = Tasks.change_task(task)
+    # Convert tags list to string for form display, but keep the original task for validation
+    display_task = %{task | tags: format_tags(task.tags)}
+    changeset = Tasks.change_task(display_task)
 
     {:ok,
      socket
      |> assign(assigns)
-     |> assign_form(changeset)}
+     |> assign(:original_task, task)
+     |> assign(:form, to_form(changeset))}
   end
 
   @impl true
   def handle_event("validate", %{"task" => task_params}, socket) do
+    # Process tags for validation too
+    processed_params = process_tags(task_params)
+    
+    # Use the original task for validation (which has proper array tags)
+    base_task = Map.get(socket.assigns, :original_task, socket.assigns.task)
+    
     changeset =
-      socket.assigns.task
-      |> Tasks.change_task(task_params)
+      base_task
+      |> Tasks.change_task(processed_params)
       |> Map.put(:action, :validate)
 
-    {:noreply, assign_form(socket, changeset)}
+    {:noreply, assign(socket, :form, to_form(changeset))}
   end
 
   def handle_event("save", %{"task" => task_params}, socket) do
     task_params = process_tags(task_params)
+    IO.puts("=== SAVE TASK PARAMS ===")
+    IO.inspect(task_params)
     save_task(socket, socket.assigns.action, task_params)
   end
 
   defp save_task(socket, :edit, task_params) do
-    case Tasks.update_task(socket.assigns.task, task_params) do
+    base_task = Map.get(socket.assigns, :original_task, socket.assigns.task)
+    case Tasks.update_task(base_task, task_params) do
       {:ok, task} ->
         notify_parent({:saved, task})
 
         {:noreply,
          socket
          |> put_flash(:info, "Task updated successfully")
-         |> push_navigate(to: socket.assigns.navigate)}
+         |> push_patch(to: socket.assigns.patch)}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign_form(socket, changeset)}
+        {:noreply, assign(socket, :form, to_form(changeset))}
     end
   end
 
   defp save_task(socket, :new, task_params) do
+    IO.puts("=== CREATING NEW TASK ===")
+    IO.inspect(task_params)
+    
     case Tasks.create_task(task_params) do
       {:ok, task} ->
+        IO.puts("=== TASK CREATED SUCCESSFULLY ===")
         notify_parent({:saved, task})
 
         {:noreply,
          socket
          |> put_flash(:info, "Task created successfully")
-         |> push_navigate(to: socket.assigns.navigate)}
+         |> push_patch(to: socket.assigns.patch)}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign_form(socket, changeset)}
+        IO.puts("=== TASK CREATION FAILED ===")
+        IO.inspect(changeset.errors)
+        {:noreply, assign(socket, :form, to_form(changeset))}
     end
   end
 
-  defp assign_form(socket, %Ecto.Changeset{} = changeset) do
-    assign(socket, :form, changeset)
-  end
 
   defp notify_parent(msg), do: send(self(), {__MODULE__, msg})
 
@@ -131,8 +142,19 @@ defmodule TaskManagerWeb.TaskLive.FormComponent do
     
     Map.put(params, "tags", tags)
   end
+  
+  defp process_tags(%{"tags" => tags} = params) when is_list(tags) do
+    # Tags is already a list, no processing needed
+    params
+  end
 
   defp process_tags(params), do: params
+  
+  defp clean_empty_values(params) do
+    params
+    |> Enum.reject(fn {_key, value} -> value == "" or value == nil end)
+    |> Enum.into(%{})
+  end
   
   defp format_tags(tags) when is_list(tags), do: Enum.join(tags, ", ")
   defp format_tags(_), do: ""

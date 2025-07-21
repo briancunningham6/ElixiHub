@@ -23,16 +23,16 @@ defmodule Elixihub.Deployment.AppInstaller do
     IO.puts("App name: #{app.name}")
     IO.puts("Extract path: #{extract_path}")
     IO.puts("Host architecture: #{inspect(host_architecture)}")
+    IO.puts("Deploy as service: #{app.deploy_as_service}")
     
     with {:ok, app_type} <- detect_app_type(connection, extract_path),
          {:ok, _} <- prepare_installation_environment(connection, extract_path),
          {:ok, result} <- install_by_app_type(connection, app_type, extract_path, app, host_architecture),
-         {:ok, _} <- (IO.puts("=== CALLING CONFIGURE_APP_SERVICE ==="); configure_app_service(connection, app, extract_path, host_architecture)),
-         {:ok, _} <- (IO.puts("=== CALLING START_APP_SERVICE ==="); start_app_service(connection, app, extract_path, host_architecture)) do
+         {:ok, service_result} <- handle_service_or_shell_start(connection, app, extract_path, host_architecture) do
       {:ok, %{
         app_type: app_type,
         install_path: extract_path,
-        service_status: :started,
+        service_status: service_result,
         installation_log: result
       }}
     else
@@ -211,6 +211,191 @@ defmodule Elixihub.Deployment.AppInstaller do
 
       {:error, reason} ->
         {:error, "Failed to restart service: #{reason}"}
+    end
+  end
+
+  @doc """
+  Starts an application service.
+  """
+  def start_app_service(connection, %App{} = app, extract_path, host_architecture \\ nil) do
+    service_name = get_service_name(app)
+
+    case host_architecture do
+      "MacOs(Apple Silicon)" ->
+        # For macOS, the app should already be started by configure_launchd_service
+        # Just verify it's running
+        IO.puts("=== MACOS START_APP_SERVICE ===")
+        IO.puts("Service name: #{service_name}")
+        IO.puts("Extract path: #{extract_path}")
+        IO.puts("App port: #{get_app_port(app)}")
+        IO.puts("Verifying macOS app is running...")
+
+        case verify_app_running(connection, app, extract_path) do
+          {:ok, :running} ->
+            IO.puts("=== APP VERIFICATION SUCCESSFUL ===")
+            IO.puts("App verified as running successfully")
+            {:ok, :started}
+
+          {:error, reason} ->
+            IO.puts("=== APP VERIFICATION FAILED ===")
+            IO.puts("App verification failed: #{reason}")
+            IO.puts("Attempting to start manually...")
+            # Try to start manually if not running
+            case try_direct_app_start(connection, app, extract_path) do
+              {:ok, :configured} ->
+                IO.puts("=== MANUAL START SUCCESSFUL ===")
+                {:ok, :started}
+
+              {:error, start_reason} ->
+                IO.puts("=== MANUAL START FAILED ===")
+                IO.puts("Manual start failed: #{start_reason}")
+                {:error, "App failed to start: #{start_reason}"}
+            end
+        end
+
+      _ ->
+        # Standard systemd approach for Linux
+        start_command = "sudo systemctl start #{service_name}"
+
+        case SSHClient.execute_command(connection, start_command) do
+          {:ok, {_, _, 0}} ->
+            # Wait longer for Elixir application to start properly
+            :timer.sleep(5000)
+
+            # Standard systemd check for Linux
+            case check_service_status_with_retries(connection, app, host_architecture, 3) do
+              {:ok, "active"} -> {:ok, :started}
+              {:ok, "activating"} ->
+                # Give it more time for activating state
+                :timer.sleep(10000)
+                case get_app_service_status(connection, app, host_architecture) do
+                  {:ok, "active"} -> {:ok, :started}
+                  {:ok, status} ->
+                    log_command = "journalctl -u #{service_name} -f"
+                    {:error, "Service is still #{status} after extended wait. Check logs with: #{log_command}"}
+                  {:error, reason} -> {:error, "Failed to check service status: #{reason}"}
+                end
+              {:ok, status} ->
+                log_command = "journalctl -u #{service_name} -f"
+                {:error, "Service started but status is: #{status}. Check logs with: #{log_command}"}
+              {:error, reason} -> {:error, "Failed to check service status: #{reason}"}
+            end
+
+          {:ok, {_, error, exit_code}} ->
+            {:error, "Failed to start service (exit #{exit_code}): #{error}"}
+
+          {:error, reason} ->
+            {:error, "Failed to start service: #{reason}"}
+        end
+    end
+  end
+
+  defp handle_service_or_shell_start(connection, %App{} = app, extract_path, host_architecture) do
+    case app.deploy_as_service do
+      true ->
+        IO.puts("=== CONFIGURING AS SERVICE ===")
+        with {:ok, _} <- configure_app_service(connection, app, extract_path, host_architecture),
+             {:ok, _} <- start_app_service(connection, app, extract_path, host_architecture) do
+          {:ok, :service_started}
+        end
+
+      false ->
+        IO.puts("=== STARTING AS SHELL COMMAND ===")
+        start_app_as_shell_command(connection, app, extract_path, host_architecture)
+    end
+  end
+
+  defp start_app_as_shell_command(connection, %App{} = app, extract_path, host_architecture) do
+    IO.puts("Starting app as shell command...")
+    
+    case detect_app_type(connection, extract_path) do
+      {:ok, "elixir"} ->
+        start_elixir_app_shell(connection, app, extract_path)
+      {:ok, "python"} ->
+        start_python_app_shell(connection, app, extract_path)
+      {:ok, "node"} ->
+        start_node_app_shell(connection, app, extract_path)
+      {:ok, _app_type} ->
+        start_generic_app_shell(connection, app, extract_path)
+      {:error, reason} ->
+        {:error, "Failed to detect app type for shell start: #{reason}"}
+    end
+  end
+
+  defp start_elixir_app_shell(connection, app, extract_path) do
+    start_command = "cd #{extract_path} && nohup mix run --no-halt > #{app.name}.log 2>&1 & echo $! > #{app.name}.pid"
+    
+    case SSHClient.execute_command(connection, start_command) do
+      {:ok, {_, _, 0}} ->
+        {:ok, :shell_started}
+      {:ok, {_, error, exit_code}} ->
+        {:error, "Failed to start Elixir app as shell (exit #{exit_code}): #{error}"}
+      {:error, reason} ->
+        {:error, "Failed to start Elixir app as shell: #{reason}"}
+    end
+  end
+
+  defp start_python_app_shell(connection, app, extract_path) do
+    start_command = "cd #{extract_path} && nohup python3 main.py > #{app.name}.log 2>&1 & echo $! > #{app.name}.pid"
+    
+    case SSHClient.execute_command(connection, start_command) do
+      {:ok, {_, _, 0}} ->
+        {:ok, :shell_started}
+      {:ok, {_, error, exit_code}} ->
+        {:error, "Failed to start Python app as shell (exit #{exit_code}): #{error}"}
+      {:error, reason} ->
+        {:error, "Failed to start Python app as shell: #{reason}"}
+    end
+  end
+
+  defp start_node_app_shell(connection, app, extract_path) do
+    start_command = "cd #{extract_path} && nohup npm start > #{app.name}.log 2>&1 & echo $! > #{app.name}.pid"
+    
+    case SSHClient.execute_command(connection, start_command) do
+      {:ok, {_, _, 0}} ->
+        {:ok, :shell_started}
+      {:ok, {_, error, exit_code}} ->
+        {:error, "Failed to start Node app as shell (exit #{exit_code}): #{error}"}
+      {:error, reason} ->
+        {:error, "Failed to start Node app as shell: #{reason}"}
+    end
+  end
+
+  defp start_generic_app_shell(connection, app, extract_path) do
+    # Try to find common executable files
+    executables = ["run.sh", "start.sh", "app", "main"]
+    
+    case find_executable(connection, extract_path, executables) do
+      {:ok, executable} ->
+        start_command = "cd #{extract_path} && nohup ./#{executable} > #{app.name}.log 2>&1 & echo $! > #{app.name}.pid"
+        
+        case SSHClient.execute_command(connection, start_command) do
+          {:ok, {_, _, 0}} ->
+            {:ok, :shell_started}
+          {:ok, {_, error, exit_code}} ->
+            {:error, "Failed to start app as shell (exit #{exit_code}): #{error}"}
+          {:error, reason} ->
+            {:error, "Failed to start app as shell: #{reason}"}
+        end
+      
+      {:error, reason} ->
+        {:error, "No executable found for generic app: #{reason}"}
+    end
+  end
+
+  defp find_executable(connection, extract_path, []) do
+    {:error, "No executable files found"}
+  end
+
+  defp find_executable(connection, extract_path, [executable | rest]) do
+    file_path = Path.join(extract_path, executable)
+    
+    if SSHClient.path_exists?(connection, file_path) do
+      # Make it executable
+      SSHClient.execute_command(connection, "chmod +x #{file_path}")
+      {:ok, executable}
+    else
+      find_executable(connection, extract_path, rest)
     end
   end
 
@@ -1454,78 +1639,6 @@ defmodule Elixihub.Deployment.AppInstaller do
     get_app_service_status(connection, app, host_architecture)
   end
 
-  defp start_app_service(connection, app, extract_path, host_architecture) do
-    service_name = get_service_name(app)
-
-    case host_architecture do
-      "MacOs(Apple Silicon)" ->
-        # For macOS, the app should already be started by configure_launchd_service
-        # Just verify it's running
-        IO.puts("=== MACOS START_APP_SERVICE ===")
-        IO.puts("Service name: #{service_name}")
-        IO.puts("Extract path: #{extract_path}")
-        IO.puts("App port: #{get_app_port(app)}")
-        IO.puts("Verifying macOS app is running...")
-
-        case verify_app_running(connection, app, extract_path) do
-          {:ok, :running} ->
-            IO.puts("=== APP VERIFICATION SUCCESSFUL ===")
-            IO.puts("App verified as running successfully")
-            {:ok, :started}
-
-          {:error, reason} ->
-            IO.puts("=== APP VERIFICATION FAILED ===")
-            IO.puts("App verification failed: #{reason}")
-            IO.puts("Attempting to start manually...")
-            # Try to start manually if not running
-            case try_direct_app_start(connection, app, extract_path) do
-              {:ok, :configured} ->
-                IO.puts("=== MANUAL START SUCCESSFUL ===")
-                {:ok, :started}
-
-              {:error, start_reason} ->
-                IO.puts("=== MANUAL START FAILED ===")
-                IO.puts("Manual start failed: #{start_reason}")
-                {:error, "App failed to start: #{start_reason}"}
-            end
-        end
-
-      _ ->
-        # Standard systemd approach for Linux
-        start_command = "sudo systemctl start #{service_name}"
-
-        case SSHClient.execute_command(connection, start_command) do
-          {:ok, {_, _, 0}} ->
-            # Wait longer for Elixir application to start properly
-            :timer.sleep(5000)
-
-            # Standard systemd check for Linux
-            case check_service_status_with_retries(connection, app, host_architecture, 3) do
-              {:ok, "active"} -> {:ok, :started}
-              {:ok, "activating"} ->
-                # Give it more time for activating state
-                :timer.sleep(10000)
-                case get_app_service_status(connection, app, host_architecture) do
-                  {:ok, "active"} -> {:ok, :started}
-                  {:ok, status} ->
-                    log_command = "journalctl -u #{service_name} -f"
-                    {:error, "Service is still #{status} after extended wait. Check logs with: #{log_command}"}
-                  {:error, reason} -> {:error, "Failed to check service status: #{reason}"}
-                end
-              {:ok, status} ->
-                log_command = "journalctl -u #{service_name} -f"
-                {:error, "Service started but status is: #{status}. Check logs with: #{log_command}"}
-              {:error, reason} -> {:error, "Failed to check service status: #{reason}"}
-            end
-
-          {:ok, {_, error, exit_code}} ->
-            {:error, "Failed to start service (exit #{exit_code}): #{error}"}
-
-          {:error, reason} ->
-            {:error, "Failed to start service: #{reason}"}
-        end
-    end
-  end
 
   defp verify_app_running(connection, app, extract_path) do
     # Use the enhanced verification function
