@@ -1,0 +1,11 @@
+## This file is a PO Template file.
+##
+## Files in this directory are used by the GNU gettext library
+## to translate the application.
+##
+## To generate a new error.pot file, run:
+##   mix gettext.extract
+##
+## Learn more about GNU gettext at https://www.gnu.org/software/gettext/
+msgid ""
+msgstr ""

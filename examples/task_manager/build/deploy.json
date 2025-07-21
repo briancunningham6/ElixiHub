@@ -1,0 +1,22 @@
+{
+  "name": "task_manager",
+  "version": "1.0.0",
+  "description": "Task management application for ElixiHub",
+  "port": 4001,
+  "requires_database": true,
+  "database_name": "task_manager",
+  "environment_variables": {
+    "MIX_ENV": "prod",
+    "PORT": "4001",
+    "SECRET_KEY_BASE": "generate_random_key",
+    "DATABASE_URL": "postgresql://user:pass@localhost/task_manager"
+  },
+  "systemd_service": {
+    "ExecStart": "/usr/bin/mix phx.server",
+    "WorkingDirectory": "/opt/task_manager",
+    "Environment": [
+      "MIX_ENV=prod",
+      "PORT=4001"
+    ]
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "roles": [
+    {
+      "identifier": "task_viewer",
+      "name": "Task Viewer",
+      "description": "Can view tasks assigned to them",
+      "permissions": {
+        "read": true,
+        "write": false,
+        "admin": false
+      }
+    },
+    {
+      "identifier": "task_creator",
+      "name": "Task Creator",
+      "description": "Can create and manage their own tasks",
+      "permissions": {
+        "read": true,
+        "write": true,
+        "admin": false
+      }
+    },
+    {
+      "identifier": "task_manager",
+      "name": "Task Manager",
+      "description": "Can manage all tasks and assign them to users",
+      "permissions": {
+        "read": true,
+        "write": true,
+        "admin": true
+      }
+    }
+  ]
+}
