@@ -69,7 +69,7 @@ defmodule TaskManagerWeb.TaskLive.Index do
     
     tasks = case status do
       "all" -> Tasks.list_tasks_by_user(user_id)
-      _ -> Tasks.list_tasks_by_user(user_id) |> Enum.filter(&(&1.status == status))
+      _ -> Tasks.list_tasks_by_status_for_user(status, user_id)
     end
 
     socket = 

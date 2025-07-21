@@ -19,6 +19,7 @@ defmodule TaskManagerWeb.TaskLive.FormComponent do
         phx-change="validate"
         phx-submit="save"
       >
+        <.input field={@form[:user_id]} type="hidden" />
         <.input field={@form[:title]} type="text" label="Title" />
         <.input field={@form[:description]} type="textarea" label="Description" />
         <.input
@@ -48,6 +49,7 @@ defmodule TaskManagerWeb.TaskLive.FormComponent do
         <.input field={@form[:due_date]} type="datetime-local" label="Due Date" />
         <.input field={@form[:assignee_id]} type="text" label="Assignee ID" />
         <.input field={@form[:tags]} type="text" label="Tags (comma separated)" />
+        <.input field={@form[:private]} type="checkbox" label="Private task (only visible to you)" />
         
         <:actions>
           <.button phx-disable-with="Saving...">Save Task</.button>
@@ -72,8 +74,11 @@ defmodule TaskManagerWeb.TaskLive.FormComponent do
 
   @impl true
   def handle_event("validate", %{"task" => task_params}, socket) do
-    # Process tags for validation too
-    processed_params = process_tags(task_params)
+    # Process tags and private field for validation too
+    processed_params = 
+      task_params
+      |> process_tags()
+      |> process_private()
     
     # Use the original task for validation (which has proper array tags)
     base_task = Map.get(socket.assigns, :original_task, socket.assigns.task)
@@ -87,7 +92,10 @@ defmodule TaskManagerWeb.TaskLive.FormComponent do
   end
 
   def handle_event("save", %{"task" => task_params}, socket) do
-    task_params = process_tags(task_params)
+    task_params = 
+      task_params
+      |> process_tags()
+      |> process_private()
     IO.puts("=== SAVE TASK PARAMS ===")
     IO.inspect(task_params)
     save_task(socket, socket.assigns.action, task_params)
@@ -149,6 +157,18 @@ defmodule TaskManagerWeb.TaskLive.FormComponent do
   end
 
   defp process_tags(params), do: params
+
+  defp process_private(%{"private" => private} = params) when private in ["on", "true", true] do
+    Map.put(params, "private", true)
+  end
+  
+  defp process_private(%{"private" => _} = params) do
+    Map.put(params, "private", false)
+  end
+  
+  defp process_private(params) do
+    Map.put(params, "private", false)
+  end
   
   defp clean_empty_values(params) do
     params

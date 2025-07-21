@@ -298,6 +298,9 @@ defmodule TaskManagerWeb.CoreComponents do
     <div
       id={@id}
       class={["fixed inset-0 z-50 overflow-y-auto", @show && "block" || "hidden"]}
+      phx-window-keydown={@on_cancel}
+      phx-key="escape"
+      tabindex="0"
     >
       <div class="fixed inset-0 bg-black bg-opacity-50"></div>
       <div class="flex min-h-full items-center justify-center p-4">

@@ -53,6 +53,13 @@
   <:col :let={task} label="Priority">
     <.badge color={priority_color(task.priority)}><%= task.priority %></.badge>
   </:col>
+  <:col :let={task} label="Privacy">
+    <%= if task.private do %>
+      <.badge color="gray">🔒 Private</.badge>
+    <% else %>
+      <.badge color="blue">👥 Public</.badge>
+    <% end %>
+  </:col>
   <:col :let={task} label="Due Date">
     <%= if task.due_date, do: Calendar.strftime(task.due_date, "%Y-%m-%d"), else: "-" %>
   </:col>

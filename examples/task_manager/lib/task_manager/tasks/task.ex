@@ -14,6 +14,7 @@ defmodule TaskManager.Tasks.Task do
     field :due_date, :utc_datetime
     field :completed_at, :utc_datetime
     field :tags, {:array, :string}, default: []
+    field :private, :boolean, default: false
 
     timestamps(type: :utc_datetime)
   end
@@ -21,7 +22,7 @@ defmodule TaskManager.Tasks.Task do
   @doc false
   def changeset(task, attrs) do
     task
-    |> cast(attrs, [:title, :description, :status, :priority, :user_id, :assignee_id, :due_date, :completed_at, :tags])
+    |> cast(attrs, [:title, :description, :status, :priority, :user_id, :assignee_id, :due_date, :completed_at, :tags, :private])
     |> validate_required([:title, :user_id])
     |> validate_length(:title, min: 1, max: 255)
     |> validate_length(:description, max: 1000)

@@ -8,7 +8,9 @@ defmodule TaskManager.Tasks do
   alias TaskManager.Tasks.Task
 
   def list_tasks do
-    Repo.all(Task)
+    Task
+    |> where([t], t.private == false)
+    |> Repo.all()
   end
 
   def list_tasks_by_user(user_id) when not is_nil(user_id) do
@@ -17,12 +19,26 @@ defmodule TaskManager.Tasks do
     |> order_by([t], desc: t.inserted_at)
     |> Repo.all()
   end
+
+  def list_public_tasks do
+    Task
+    |> where([t], t.private == false)
+    |> order_by([t], desc: t.inserted_at)
+    |> Repo.all()
+  end
   
   def list_tasks_by_user(_user_id), do: []
 
   def list_tasks_by_status(status) do
     Task
-    |> where([t], t.status == ^status)
+    |> where([t], t.status == ^status and t.private == false)
+    |> order_by([t], desc: t.inserted_at)
+    |> Repo.all()
+  end
+
+  def list_tasks_by_status_for_user(status, user_id) do
+    Task
+    |> where([t], t.status == ^status and t.user_id == ^user_id)
     |> order_by([t], desc: t.inserted_at)
     |> Repo.all()
   end

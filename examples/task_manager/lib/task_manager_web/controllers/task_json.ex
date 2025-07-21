@@ -45,6 +45,7 @@ defmodule TaskManagerWeb.TaskJSON do
       due_date: task.due_date,
       completed_at: task.completed_at,
       tags: task.tags,
+      private: task.private,
       inserted_at: task.inserted_at,
       updated_at: task.updated_at
     }
