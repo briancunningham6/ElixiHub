@@ -46,6 +46,9 @@ mix compile
 # Create the release
 mix release tasks_app
 
+# Fix permissions for ERTS binaries immediately after build
+find _build/prod/rel/tasks_app/erts-*/bin -type f -exec chmod +x {} \; 2>/dev/null || true
+
 cd ..
 
 echo "✓ Release built and included in package"
@@ -128,8 +131,10 @@ if [ ! -f "_build/prod/rel/tasks_app/bin/tasks_app" ]; then
     exit 1
 fi
 
-# Ensure the binary is executable
+# Ensure the binary and ERTS binaries are executable
 chmod +x "_build/prod/rel/tasks_app/bin/tasks_app"
+# Fix permissions for ERTS binaries that may be needed
+find "_build/prod/rel/tasks_app/erts-"*/bin -type f -exec chmod +x {} \; 2>/dev/null || true
 
 echo "✓ Release binary verified at _build/prod/rel/tasks_app/bin/tasks_app"
 
@@ -234,6 +239,8 @@ find . -type f -exec chmod 644 {} \;
 find . -type d -exec chmod 755 {} \;
 chmod +x install.sh
 chmod +x _build/prod/rel/tasks_app/bin/tasks_app
+# Ensure ERTS binaries are executable in the tar
+find _build/prod/rel/tasks_app/erts-*/bin -type f -exec chmod +x {} \; 2>/dev/null || true
 
 # Create uncompressed tar archive with verbose output and proper ownership
 tar -cf ../task_manager.tar --exclude='.DS_Store' --exclude='._*' --owner=0 --group=0 .

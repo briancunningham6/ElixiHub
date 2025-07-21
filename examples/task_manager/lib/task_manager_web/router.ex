@@ -10,9 +10,13 @@ defmodule TaskManagerWeb.Router do
     plug :put_secure_browser_headers
   end
 
+  pipeline :authenticated do
+    plug TaskManager.Auth.SessionAuth
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
-    plug TaskManager.Auth.SessionAuth
+    plug TaskManager.Auth.JWTAuth
   end
 
   scope "/", TaskManagerWeb do
@@ -21,6 +25,8 @@ defmodule TaskManagerWeb.Router do
     get "/", PageController, :home
     get "/sso/authenticate", SSOController, :authenticate
     get "/sso/logout", SSOController, :logout
+    # Alternative direct auth for debugging
+    get "/direct/login", DirectAuthController, :login
   end
 
   scope "/api", TaskManagerWeb do
@@ -32,7 +38,7 @@ defmodule TaskManagerWeb.Router do
   end
 
   scope "/app", TaskManagerWeb do
-    pipe_through :browser
+    pipe_through [:browser, :authenticated]
 
     live "/", TaskLive.Index, :index
     live "/tasks/new", TaskLive.Index, :new

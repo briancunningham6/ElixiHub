@@ -365,7 +365,7 @@ defmodule ElixihubWeb.Admin.AppLive.Index do
                   </div>
                   <p class="text-sm text-gray-500 mt-1"><%= app.description %></p>
                   <div class="text-sm text-gray-600 mt-1">
-                    URL: <a href={app.url} target="_blank" class="text-blue-600 hover:text-blue-800"><%= app.url %></a>
+                    URL: <a href={~p"/sso/auth?app_id=#{app.name}&return_to=#{URI.encode(app.url)}"} target="_blank" class="text-blue-600 hover:text-blue-800"><%= app.url %></a>
                   </div>
                   <div class="text-xs text-gray-400 mt-1">
                     API Key: <code class="bg-gray-100 px-2 py-1 rounded text-xs"><%= app.api_key %></code>

@@ -9,17 +9,23 @@ defmodule TaskManager.Auth.SessionAuth do
   def init(opts), do: opts
 
   def call(conn, _opts) do
+    current_path = conn.request_path
+    Logger.info("SessionAuth called for path: #{current_path}")
+    
     cond do
       # Check if already authenticated in session
-      get_session(conn, :authenticated) ->
+      get_session(conn, :authenticated) == true ->
+        Logger.info("SessionAuth: Found authenticated session for #{current_path}")
         assign_user_from_session(conn)
         
       # Check for JWT token in Authorization header
       jwt_token = get_jwt_token(conn) ->
+        Logger.info("SessionAuth: Found JWT token in header for #{current_path}")
         authenticate_with_jwt(conn, jwt_token)
         
       # No authentication found
       true ->
+        Logger.info("SessionAuth: No authentication found for #{current_path}, redirecting to SSO")
         handle_unauthenticated(conn)
     end
   end
@@ -99,7 +105,7 @@ defmodule TaskManager.Auth.SessionAuth do
     elixihub_url = Application.get_env(:task_manager, :elixihub)[:base_url] || "http://localhost:4005"
     return_url = "#{get_base_url(conn)}/sso/authenticate"
     
-    "#{elixihub_url}/sso/auth?app=task_manager&return_url=#{URI.encode(return_url)}"
+    "#{elixihub_url}/sso/auth?app_id=task_manager&return_to=#{URI.encode(return_url)}"
   end
 
   defp get_base_url(conn) do

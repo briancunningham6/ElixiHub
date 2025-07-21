@@ -47,7 +47,8 @@ config :logger, :console,
 config :phoenix, :json_library, Jason
 
 config :task_manager, :elixihub,
-  jwks_url: System.get_env("ELIXIHUB_JWKS_URL", "http://localhost:4000/.well-known/jwks.json"),
-  issuer: System.get_env("ELIXIHUB_ISSUER", "ElixiHub")
+  jwks_url: System.get_env("ELIXIHUB_JWKS_URL", "http://localhost:4005/.well-known/jwks.json"),
+  issuer: System.get_env("ELIXIHUB_ISSUER", "ElixiHub"),
+  base_url: System.get_env("ELIXIHUB_BASE_URL", "http://localhost:4005")
 
 import_config "#{config_env()}.exs"

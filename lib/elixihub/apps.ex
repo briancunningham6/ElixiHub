@@ -69,6 +69,22 @@ defmodule Elixihub.Apps do
   end
 
   @doc """
+  Gets an app by name.
+
+  ## Examples
+
+      iex> get_app_by_name("task_manager")
+      %App{}
+
+      iex> get_app_by_name("nonexistent")
+      nil
+
+  """
+  def get_app_by_name(name) do
+    Repo.get_by(App, name: name)
+  end
+
+  @doc """
   Creates an app.
 
   ## Examples
