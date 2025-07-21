@@ -28,13 +28,12 @@ defmodule AgentAppWeb.Router do
     plug :put_root_layout, html: {AgentAppWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
-    plug AgentApp.Auth, :maybe_authenticate_browser
+    plug AgentApp.Auth, :authenticate_browser
   end
 
   pipeline :api do
     plug :accepts, ["json"]
-    # TODO: Add authentication plug once AgentApp.Auth module is properly compiled
-    # plug AgentApp.Auth, :require_authentication
+    plug AgentApp.Auth, :require_authentication
   end
 
   # Browser routes (for testing/development)

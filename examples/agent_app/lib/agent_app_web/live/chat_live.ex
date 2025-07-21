@@ -1,8 +1,6 @@
 defmodule AgentAppWeb.ChatLive do
   use Phoenix.LiveView, layout: {AgentAppWeb.Layouts, :app}
   
-  import AgentAppWeb.CoreComponents
-
   require Logger
 
   @impl true
@@ -255,7 +253,8 @@ defmodule AgentAppWeb.ChatLive do
     # Execute tool calls asynchronously
     user_context = %{
       user_id: socket.assigns.current_user.user_id,
-      username: socket.assigns.current_user.username
+      username: socket.assigns.current_user.username,
+      auth_token: get_session(socket, :auth_token)
     }
 
     Task.async(fn ->
@@ -300,35 +299,25 @@ defmodule AgentAppWeb.ChatLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen bg-gray-100">
-      <div class="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        <div class="bg-white rounded-lg shadow-lg overflow-hidden">
-          <!-- Header -->
-          <div class="bg-blue-600 px-6 py-4">
-            <div class="flex items-center justify-between">
-              <h1 class="text-xl font-semibold text-white">ElixiHub Agent</h1>
-              <div class="flex items-center space-x-4">
-                <span class="text-blue-100 text-sm">
-                  User: <%= @current_user.email || @current_user.username %>
-                </span>
-                <button
-                  phx-click="clear_chat"
-                  class="text-blue-100 hover:text-white text-sm underline"
-                >
-                  Clear Chat
-                </button>
-                <a
-                  href="/logout"
-                  class="text-blue-100 hover:text-white text-sm underline"
-                >
-                  Logout
-                </a>
-              </div>
+    <div class="max-w-4xl mx-auto">
+      <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+        <!-- Header -->
+        <div class="bg-blue-600 px-6 py-4">
+          <div class="flex items-center justify-between">
+            <h1 class="text-xl font-semibold text-white">AI Chat Assistant</h1>
+            <div class="flex items-center space-x-4">
+              <button
+                phx-click="clear_chat"
+                class="text-blue-100 hover:text-white text-sm underline"
+              >
+                Clear Chat
+              </button>
             </div>
           </div>
+        </div>
 
-          <!-- Chat Messages -->
-          <div class="h-96 overflow-y-auto p-6 space-y-4" id="chat-messages">
+        <!-- Chat Messages -->
+        <div class="h-96 overflow-y-auto p-6 space-y-4" id="chat-messages">
             <%= if Enum.empty?(@messages) do %>
               <div class="text-center text-gray-500 py-8">
                 <p>Hello! I'm your ElixiHub Agent. I can help you interact with various applications.</p>
@@ -375,94 +364,93 @@ defmodule AgentAppWeb.ChatLive do
                 </div>
               </div>
             <% end %>
-          </div>
+        </div>
 
-          <!-- Input Area -->
-          <div class="border-t bg-gray-50 px-6 py-4">
-            <form phx-submit="send_message" class="flex space-x-3">
-              <input
-                type="text"
-                name="message"
-                value={@input_message}
-                phx-change="update_input"
-                placeholder="Type your message..."
-                disabled={@loading}
-                class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                autocomplete="off"
-              />
-              <button
-                type="submit"
-                disabled={@loading or @input_message == ""}
-                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                <%= if @loading do %>
-                  <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                <% end %>
-                Send
-              </button>
-            </form>
-          </div>
-
-          <!-- Available Tools Info -->
-          <%= if Enum.any?(@available_tools) do %>
-            <div class="border-t bg-gray-50 px-6 py-3">
-              <details class="text-sm text-gray-600">
-                <summary class="cursor-pointer hover:text-gray-800">
-                  Available Tools (<%= length(@available_tools) %>)
-                </summary>
-                <ul class="mt-2 space-y-1">
-                  <%= for tool <- @available_tools do %>
-                    <li>
-                      <strong><%= tool["name"] %></strong>: <%= tool["description"] %>
-                      <span class="text-gray-500">(<%= tool.server %>)</span>
-                    </li>
-                  <% end %>
-                </ul>
-              </details>
-            </div>
-          <% end %>
-
-          <!-- MCP Servers Info -->
-          <div class="border-t bg-gray-50 px-6 py-3">
-            <details class="text-sm text-gray-600" open>
-              <summary class="cursor-pointer hover:text-gray-800 font-semibold">
-                MCP Servers (<%= length(@mcp_servers) %>)
-              </summary>
-              <%= if Enum.any?(@mcp_servers) do %>
-                <div class="mt-3 space-y-2">
-                  <%= for server <- @mcp_servers do %>
-                    <div class="bg-white rounded border p-3">
-                      <div class="flex items-center justify-between">
-                        <div>
-                          <div class="font-medium text-gray-900"><%= server.name %></div>
-                          <div class="text-xs text-gray-500"><%= server.description %></div>
-                          <div class="text-xs text-gray-400 mt-1">
-                            URL: <%= server.url %> | Version: <%= server.version %>
-                          </div>
-                        </div>
-                        <div class="flex-shrink-0">
-                          <span class={[
-                            "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
-                            if server.status == "connected" do
-                              "bg-green-100 text-green-800"
-                            else
-                              "bg-red-100 text-red-800"
-                            end
-                          ]}>
-                            <%= server.status %>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  <% end %>
-                </div>
-              <% else %>
-                <div class="mt-2 text-gray-500 italic">
-                  No MCP servers discovered. Deploy applications with MCP configuration to see them here.
-                </div>
+        <!-- Input Area -->
+        <div class="border-t bg-gray-50 px-6 py-4">
+          <form phx-submit="send_message" class="flex space-x-3">
+            <input
+              type="text"
+              name="message"
+              value={@input_message}
+              phx-change="update_input"
+              placeholder="Type your message..."
+              disabled={@loading}
+              class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              autocomplete="off"
+            />
+            <button
+              type="submit"
+              disabled={@loading or @input_message == ""}
+              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+              <%= if @loading do %>
+                <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
               <% end %>
+              Send
+            </button>
+          </form>
+        </div>
+
+        <!-- Available Tools Info -->
+        <%= if Enum.any?(@available_tools) do %>
+          <div class="border-t bg-gray-50 px-6 py-3">
+            <details class="text-sm text-gray-600">
+              <summary class="cursor-pointer hover:text-gray-800">
+                Available Tools (<%= length(@available_tools) %>)
+              </summary>
+              <ul class="mt-2 space-y-1">
+                <%= for tool <- @available_tools do %>
+                  <li>
+                    <strong><%= tool["name"] %></strong>: <%= tool["description"] %>
+                    <span class="text-gray-500">(<%= tool.server %>)</span>
+                  </li>
+                <% end %>
+              </ul>
             </details>
           </div>
+        <% end %>
+
+        <!-- MCP Servers Info -->
+        <div class="border-t bg-gray-50 px-6 py-3">
+          <details class="text-sm text-gray-600" open>
+            <summary class="cursor-pointer hover:text-gray-800 font-semibold">
+              MCP Servers (<%= length(@mcp_servers) %>)
+            </summary>
+            <%= if Enum.any?(@mcp_servers) do %>
+              <div class="mt-3 space-y-2">
+                <%= for server <- @mcp_servers do %>
+                  <div class="bg-white rounded border p-3">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <div class="font-medium text-gray-900"><%= server.name %></div>
+                        <div class="text-xs text-gray-500"><%= server.description %></div>
+                        <div class="text-xs text-gray-400 mt-1">
+                          URL: <%= server.url %> | Version: <%= server.version %>
+                        </div>
+                      </div>
+                      <div class="flex-shrink-0">
+                        <span class={[
+                          "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
+                          if server.status == "connected" do
+                            "bg-green-100 text-green-800"
+                          else
+                            "bg-red-100 text-red-800"
+                          end
+                        ]}>
+                          <%= server.status %>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                <% end %>
+              </div>
+            <% else %>
+              <div class="mt-2 text-gray-500 italic">
+                No MCP servers discovered. Deploy applications with MCP configuration to see them here.
+              </div>
+            <% end %>
+          </details>
         </div>
       </div>
     </div>

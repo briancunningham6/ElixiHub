@@ -183,16 +183,12 @@ defmodule AgentApp.MCPManager do
   end
 
   defp call_mcp_tool(connection, tool_name, params, user_context) do
-    # Prepare the MCP tool call request
+    # Prepare the MCP tool call request - call the tool method directly
     request_body = %{
       jsonrpc: "2.0",
       id: generate_request_id(),
-      method: "tools/call",
-      params: %{
-        name: tool_name,
-        arguments: params,
-        context: user_context
-      }
+      method: tool_name,
+      params: params
     }
 
     # Make HTTP request to the MCP server
@@ -200,6 +196,20 @@ defmodule AgentApp.MCPManager do
       {"Content-Type", "application/json"},
       {"User-Agent", "AgentApp/1.0"}
     ]
+    
+    # Add authentication if available from user context
+    headers = if user_context && user_context[:auth_token] do
+      [{"Authorization", "Bearer #{user_context[:auth_token]}"} | headers]
+    else
+      # Fallback to config
+      auth_config = Application.get_env(:agent_app, :auth)
+      token = auth_config && auth_config[:jwt_token]
+      if token do
+        [{"Authorization", "Bearer #{token}"} | headers]
+      else
+        headers
+      end
+    end
 
     case HTTPoison.post(connection.url, Jason.encode!(request_body), headers, recv_timeout: 30_000) do
       {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
@@ -241,6 +251,16 @@ defmodule AgentApp.MCPManager do
         {"Content-Type", "application/json"},
         {"User-Agent", "AgentApp/1.0"}
       ]
+      
+      # Add authentication if available
+      auth_config = Application.get_env(:agent_app, :auth)
+      token = auth_config && auth_config[:jwt_token]
+      
+      headers = if token do
+        [{"Authorization", "Bearer #{token}"} | headers]
+      else
+        headers
+      end
 
       case HTTPoison.post(connection.url, Jason.encode!(request_body), headers, recv_timeout: 10_000) do
         {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->

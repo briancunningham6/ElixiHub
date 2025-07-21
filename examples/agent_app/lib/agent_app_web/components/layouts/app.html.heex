@@ -1,6 +1,44 @@
-<main class="px-4 py-20 sm:px-6 lg:px-8">
-  <div class="mx-auto max-w-2xl">
-    <.flash_group flash={@flash} />
-    <%= @inner_content %>
-  </div>
-</main>
+<div class="min-h-screen bg-gray-50">
+  <!-- Navigation Header -->
+  <nav class="bg-white shadow-sm border-b">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center">
+          <h1 class="text-xl font-semibold text-gray-900">ElixiHub Agent</h1>
+        </div>
+        <div class="flex items-center space-x-4">
+          <%= if assigns[:current_user] && @current_user do %>
+            <div class="flex items-center space-x-3">
+              <div class="flex items-center">
+                <div class="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center">
+                  <span class="text-white text-sm font-medium">
+                    <%= String.first(@current_user.email || @current_user.username || "U") |> String.upcase() %>
+                  </span>
+                </div>
+                <span class="ml-2 text-sm text-gray-700 font-medium">
+                  <%= @current_user.email || @current_user.username %>
+                </span>
+              </div>
+              <a
+                href="/logout"
+                class="text-gray-500 hover:text-gray-700 text-sm font-medium"
+              >
+                Logout
+              </a>
+            </div>
+          <% else %>
+            <span class="text-gray-500 text-sm">Not logged in</span>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="py-6">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <.flash_group flash={@flash} />
+      <%= @inner_content %>
+    </div>
+  </main>
+</div>

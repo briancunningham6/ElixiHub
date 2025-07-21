@@ -86,8 +86,14 @@ defmodule AgentApp.OpenAIClient do
 
   def execute_tool_calls(tool_calls, user_context) do
     Enum.map(tool_calls, fn tool_call ->
+      # Find which server this tool belongs to
+      server_name = case get_tool_server(tool_call.name) do
+        {:ok, server} -> server
+        {:error, _} -> "hello_world_app" # fallback to default
+      end
+      
       case AgentApp.MCPManager.call_tool(
-        "hello_world", # For now, we assume all tools come from hello_world server
+        server_name,
         tool_call.name,
         tool_call.arguments,
         user_context
@@ -109,6 +115,20 @@ defmodule AgentApp.OpenAIClient do
           }
       end
     end)
+  end
+
+  defp get_tool_server(tool_name) do
+    case AgentApp.MCPManager.list_available_tools() do
+      {:ok, tools} ->
+        case Enum.find(tools, fn tool -> tool["name"] == tool_name end) do
+          %{"server" => server} -> {:ok, server}
+          %{server: server} -> {:ok, server}
+          _ -> {:error, :tool_not_found}
+        end
+      
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp make_request(endpoint, body) do

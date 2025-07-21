@@ -22,8 +22,8 @@ defmodule AgentAppWeb.PageController do
       Logger.info("Redirecting authenticated user to chat")
       redirect(conn, to: "/chat")
     else
-      # User is not authenticated, automatically redirect to SSO
-      Logger.info("Redirecting unauthenticated user to SSO")
+      # User is not authenticated, show welcome page with auto-redirect
+      Logger.info("Showing welcome page for unauthenticated user")
       elixihub_config = Application.get_env(:agent_app, :elixihub)
       elixihub_url = elixihub_config[:elixihub_url] || "http://localhost:4005"
       
@@ -32,8 +32,9 @@ defmodule AgentAppWeb.PageController do
       return_url = "#{agent_url}/auth/sso_callback"
       sso_url = "#{elixihub_url}/sso/auth?return_to=#{URI.encode(return_url)}"
       
-      # Auto-redirect to SSO instead of showing login page
-      redirect(conn, external: sso_url)
+      conn
+      |> assign(:sso_url, sso_url)
+      |> render(:home)
     end
   end
 

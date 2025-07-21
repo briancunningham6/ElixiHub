@@ -16,13 +16,13 @@ defmodule AgentAppWeb.Endpoint do
       connect_info: [session: @session_options],
       timeout: 45_000,
       compress: false,
-      check_origin: :check_origin
+      check_origin: false
     ],
     longpoll: [
       connect_info: [session: @session_options],
       window_ms: 10_000,
       pubsub_timeout_ms: 2_000,
-      check_origin: :check_origin
+      check_origin: false
     ]
 
   # Serve at "/" the static files from "priv/static" directory.
