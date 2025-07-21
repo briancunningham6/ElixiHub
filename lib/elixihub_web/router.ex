@@ -42,12 +42,18 @@ defmodule ElixihubWeb.Router do
   end
 
   # API routes
+  # JWKS endpoint for JWT verification
+  scope "/", ElixihubWeb do
+    pipe_through :api
+
+    get "/.well-known/jwks.json", JWKSController, :jwks
+  end
+
   scope "/api", ElixihubWeb.Api do
     pipe_through :api
 
     post "/login", AuthController, :login
     post "/register", AuthController, :register
-    get "/.well-known/jwks.json", JwksController, :index
     get "/mcp/discovery", MCPController, :discovery
   end
 

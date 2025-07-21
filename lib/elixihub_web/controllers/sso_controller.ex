@@ -5,7 +5,7 @@ defmodule ElixihubWeb.SSOController do
 
   @doc """
   Handles SSO authentication requests from deployed applications.
-  
+
   Flow:
   1. App redirects user to ElixiHub with return URL
   2. ElixiHub checks if user is logged in
@@ -14,15 +14,15 @@ defmodule ElixihubWeb.SSOController do
   """
   def authenticate(conn, %{"return_to" => return_url, "app_id" => app_id}) do
     Logger.info("SSO authenticate request for app_id: #{app_id}, return_to: #{return_url}")
-    
+
     case get_session(conn, :user_token) do
       nil ->
         # User not logged in - redirect to login with SSO continuation
-        login_url = ~p"/users/log_in" <> 
-          "?return_to=" <> URI.encode("#{~p"/sso/auth"}?app_id=#{app_id}&return_to=#{URI.encode(return_url)}")
-        
+        sso_continuation = "/sso/auth?app_id=#{app_id}&return_to=#{URI.encode(return_url)}"
+        login_url = "/users/log_in?return_to=#{URI.encode_www_form(sso_continuation)}"
+
         redirect(conn, to: login_url)
-      
+
       user_token ->
         # User is logged in - verify token and create app token
         case Elixihub.Accounts.get_user_by_session_token(user_token) do
@@ -31,20 +31,20 @@ defmodule ElixihubWeb.SSOController do
             case verify_app_access(user, app_id) do
               :ok ->
                 generate_sso_token_and_redirect(conn, user, return_url)
-              
+
               {:error, reason} ->
                 Logger.warning("User #{user.id} denied access to app #{app_id}: #{reason}")
                 conn
                 |> put_flash(:error, "You don't have access to this application.")
                 |> redirect(to: "/")
             end
-          
+
           nil ->
             Logger.warning("Invalid user session token")
             # Invalid session - redirect to login
-            login_url = ~p"/users/log_in" <> 
-              "?return_to=" <> URI.encode("#{~p"/sso/auth"}?app_id=#{app_id}&return_to=#{URI.encode(return_url)}")
-            
+            sso_continuation = "/sso/auth?app_id=#{app_id}&return_to=#{URI.encode(return_url)}"
+            login_url = "/users/log_in?return_to=#{URI.encode_www_form(sso_continuation)}"
+
             redirect(conn, to: login_url)
         end
     end
@@ -66,7 +66,7 @@ defmodule ElixihubWeb.SSOController do
   """
   def logout(conn, %{"return_to" => return_url}) do
     Logger.info("SSO logout request, return_to: #{return_url}")
-    
+
     conn
     |> ElixihubWeb.UserAuth.log_out_user()
     |> redirect(external: return_url)
@@ -81,13 +81,16 @@ defmodule ElixihubWeb.SSOController do
   # Private functions
 
   defp verify_app_access(user, "generic"), do: :ok
-  
+
   defp verify_app_access(user, app_id) do
     # Check if the app exists and user has access to it
-    case Elixihub.Apps.get_app(app_id) do
+    case Elixihub.Apps.get_app_by_name(app_id) do
       nil ->
-        {:error, :app_not_found}
-      
+        # For development/example purposes, allow access even if app doesn't exist
+        # In production, you might want to return {:error, :app_not_found}
+        Logger.warning("App #{app_id} not found in database, allowing access anyway")
+        :ok
+
       app ->
         # For now, allow access to all apps for all users
         # You can implement role-based access control here
@@ -101,24 +104,24 @@ defmodule ElixihubWeb.SSOController do
 
   defp generate_sso_token_and_redirect(conn, user, return_url) do
     Logger.info("Generating SSO token for user: #{user.id}")
-    
+
     # Generate a JWT token for the user
     case Elixihub.Guardian.encode_and_sign(user) do
       {:ok, token, _claims} ->
         Logger.info("Successfully generated SSO token")
-        
+
         # Parse return URL to add token parameter
         uri = URI.parse(return_url)
-        
+
         # Build query parameters
         existing_query = if uri.query, do: URI.decode_query(uri.query), else: %{}
         new_query = Map.put(existing_query, "sso_token", token)
-        
+
         # Reconstruct URL with token
         final_url = %{uri | query: URI.encode_query(new_query)} |> URI.to_string()
-        
+
         redirect(conn, external: final_url)
-      
+
       {:error, reason} ->
         Logger.error("Failed to generate SSO token: #{inspect(reason)}")
         conn

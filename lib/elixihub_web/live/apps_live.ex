@@ -220,7 +220,7 @@ defmodule ElixihubWeb.AppsLive do
                 <div class="mb-4">
                   <p class="text-xs text-gray-500 mb-1">Application URL</p>
                   <a
-                    href={app.url}
+                    href={~p"/sso/auth?app_id=#{app.name}&return_to=#{URI.encode(app.url)}"}
                     target="_blank"
                     rel="noopener noreferrer"
                     class="text-sm text-blue-600 hover:text-blue-800 break-all"
@@ -235,7 +235,7 @@ defmodule ElixihubWeb.AppsLive do
                 <!-- Action Button -->
                 <div class="pt-4 border-t border-gray-200">
                   <a
-                    href={app.url}
+                    href={~p"/sso/auth?app_id=#{app.name}&return_to=#{URI.encode(app.url)}"}
                     target="_blank"
                     rel="noopener noreferrer"
                     class="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors"

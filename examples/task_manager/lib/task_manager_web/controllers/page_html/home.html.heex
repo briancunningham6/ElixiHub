@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Task Manager - ElixiHub</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            padding: 3rem;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 500px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 1rem;
+            font-size: 2.5rem;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 2rem;
+            font-size: 1.2rem;
+        }
+        .button {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 1rem 2rem;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 500;
+            transition: transform 0.2s;
+            margin: 0.5rem;
+        }
+        .button:hover {
+            transform: translateY(-2px);
+        }
+        .features {
+            margin-top: 2rem;
+            text-align: left;
+        }
+        .feature {
+            margin: 1rem 0;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        .feature h3 {
+            margin: 0 0 0.5rem 0;
+            color: #333;
+        }
+        .feature p {
+            margin: 0;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Task Manager</h1>
+        <p class="subtitle">Powerful task management for ElixiHub</p>
+        
+        <a href="/app" class="button">Open Task Manager</a>
+        <a href="/api/tasks" class="button">API Documentation</a>
+        <a href="http://localhost:4005/sso/auth?app_id=task_manager&return_to=http%3A//localhost%3A4010/sso/authenticate" class="button">Login with ElixiHub</a>
+        
+        <div class="features">
+            <div class="feature">
+                <h3>🔐 Secure Authentication</h3>
+                <p>Integrated with ElixiHub's JWT authentication system</p>
+            </div>
+            <div class="feature">
+                <h3>📝 Task Management</h3>
+                <p>Create, organize, and track tasks with priorities and due dates</p>
+            </div>
+            <div class="feature">
+                <h3>🤖 AI Integration</h3>
+                <p>MCP server provides tools for AI agents to manage tasks</p>
+            </div>
+            <div class="feature">
+                <h3>🔄 Real-time Updates</h3>
+                <p>Phoenix LiveView provides instant updates across all users</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

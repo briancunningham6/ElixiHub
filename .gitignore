@@ -50,3 +50,21 @@ npm-debug.log
 /examples/hello_world_app/assets/node_modules/
 /examples/hello_world_app/*.tar
 
+/examples/task_manager/_build/
+/examples/task_manager/deps/
+/examples/task_manager/priv/static/assets/
+/examples/task_manager/priv/static/cache_manifest.json
+/examples/task_manager/assets/node_modules/
+/examples/task_manager/*.tar
+/examples/task_manager/erl_crash.dump
+/examples/task_manager/build/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
