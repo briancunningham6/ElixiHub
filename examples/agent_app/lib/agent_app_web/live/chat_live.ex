@@ -33,6 +33,8 @@ defmodule AgentAppWeb.ChatLive do
     end
     
     # Always allow mount but show different content based on auth
+    auth_token = Map.get(session, "auth_token")
+    
     socket =
       socket
       |> assign(:messages, [])
@@ -41,6 +43,7 @@ defmodule AgentAppWeb.ChatLive do
       |> assign(:available_tools, [])
       |> assign(:mcp_servers, [])
       |> assign(:current_user, current_user || %{username: "Guest", user_id: nil, email: nil})
+      |> assign(:auth_token, auth_token)
 
     # Load tools/servers in background
     send(self(), :load_mcp_data)
@@ -185,7 +188,24 @@ defmodule AgentAppWeb.ChatLive do
   end
 
   @impl true
+  def handle_info({ref, {:tool_results, tool_results, original_tool_calls}}, socket) when is_reference(ref) do
+    # Handle task completion with reference wrapper
+    handle_tool_results(tool_results, original_tool_calls, socket)
+  end
+
+  @impl true  
   def handle_info({:tool_results, tool_results, original_tool_calls}, socket) do
+    # Handle direct tool results (fallback)
+    handle_tool_results(tool_results, original_tool_calls, socket)
+  end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, socket) do
+    # Handle task down messages (cleanup)
+    {:noreply, socket}
+  end
+
+  defp handle_tool_results(tool_results, original_tool_calls, socket) do
     # Process tool call results and get final response
     conversation_messages = socket.assigns.messages
     openai_messages = prepare_openai_messages(conversation_messages)
@@ -254,7 +274,7 @@ defmodule AgentAppWeb.ChatLive do
     user_context = %{
       user_id: socket.assigns.current_user.user_id,
       username: socket.assigns.current_user.username,
-      auth_token: get_session(socket, :auth_token)
+      auth_token: socket.assigns.auth_token
     }
 
     Task.async(fn ->

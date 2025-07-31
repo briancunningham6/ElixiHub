@@ -2,6 +2,7 @@ defmodule TaskManager.Tasks do
   @moduledoc """
   The Tasks context.
   """
+  require Logger
 
   import Ecto.Query, warn: false
   alias TaskManager.Repo
@@ -14,10 +15,15 @@ defmodule TaskManager.Tasks do
   end
 
   def list_tasks_by_user(user_id) when not is_nil(user_id) do
-    Task
+    Logger.info("list_tasks_by_user called with user_id: #{inspect(user_id)} (type: #{inspect(user_id |> to_string() |> String.length())} chars)")
+    
+    tasks = Task
     |> where([t], t.user_id == ^user_id)
     |> order_by([t], desc: t.inserted_at)
     |> Repo.all()
+    
+    Logger.info("Query returned #{length(tasks)} tasks")
+    tasks
   end
 
   def list_public_tasks do

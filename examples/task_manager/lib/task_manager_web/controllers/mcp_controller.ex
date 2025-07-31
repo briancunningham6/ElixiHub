@@ -1,10 +1,37 @@
 defmodule TaskManagerWeb.MCPController do
   use TaskManagerWeb, :controller
+  require Logger
 
   alias TaskManager.Tasks
 
-  def handle_request(conn, %{"method" => method, "params" => params, "id" => id}) do
-    user_id = get_user_id(conn)
+  def handle_request(conn, params) do
+    # Get parsed params from auth plug or from normal Phoenix params
+    parsed_params = conn.assigns[:parsed_params] || params
+    
+    {method, request_params, id} = case parsed_params do
+      %{"method" => method, "params" => request_params, "id" => id} ->
+        {method, request_params, id}
+      %{"method" => method, "id" => id} ->
+        {method, %{}, id}
+      %{"method" => method} ->
+        {method, %{}, nil}
+      _ ->
+        {nil, %{}, nil}
+    end
+    
+    if method do
+      user_id = get_user_id(conn)
+      handle_method(conn, method, request_params, user_id, id)
+    else
+      json(conn, %{
+        jsonrpc: "2.0",
+        error: %{code: -32600, message: "Invalid Request"},
+        id: nil
+      })
+    end
+  end
+
+  defp handle_method(conn, method, params, user_id, id) do
     
     case method do
       "tools/list" -> handle_tools_list(conn, params, user_id, id)
@@ -24,15 +51,8 @@ defmodule TaskManagerWeb.MCPController do
     end
   end
 
-  def handle_request(conn, _params) do
-    json(conn, %{
-      jsonrpc: "2.0",
-      error: %{code: -32600, message: "Invalid Request"},
-      id: nil
-    })
-  end
-
   defp handle_tools_list(conn, _params, _user_id, id) do
+    # Note: tools/list doesn't need user authentication as it just returns available tools
     # Return the list of available MCP tools as defined in mcp.json
     tools = [
       %{
@@ -164,16 +184,26 @@ defmodule TaskManagerWeb.MCPController do
   defp handle_list_tasks(conn, params, user_id, id) do
     status = params["status"]
     
+    # Add debugging
+    Logger.info("list_tasks called with user_id: #{inspect(user_id)}, status: #{inspect(status)}")
+    Logger.info("current_user from conn: #{inspect(conn.assigns[:current_user])}")
+    
     tasks = case status do
       nil -> Tasks.list_tasks_by_user(user_id)
       status -> Tasks.list_tasks_by_user(user_id) |> Enum.filter(&(&1.status == status))
     end
 
+    Logger.info("Found #{length(tasks)} tasks for user #{user_id}")
+    Enum.each(tasks, fn task ->
+      Logger.info("- Task: #{task.title} (ID: #{task.id}, Status: #{task.status})")
+    end)
+
     json(conn, %{
       jsonrpc: "2.0",
       result: %{
         tasks: Enum.map(tasks, &task_to_json/1),
-        count: length(tasks)
+        count: length(tasks),
+        debug_user_id: user_id
       },
       id: id
     })
@@ -182,9 +212,14 @@ defmodule TaskManagerWeb.MCPController do
   defp handle_list_private_tasks(conn, params, user_id, id) do
     status = params["status"]
     
+    # Add debugging
+    Logger.info("list_private_tasks called with user_id: #{inspect(user_id)}, status: #{inspect(status)}")
+    
     # Get all tasks for the user and filter for private tasks
     all_user_tasks = Tasks.list_tasks_by_user(user_id)
     private_tasks = Enum.filter(all_user_tasks, &(&1.private == true))
+    
+    Logger.info("Found #{length(all_user_tasks)} total tasks, #{length(private_tasks)} private tasks for user #{user_id}")
     
     # Apply status filter if provided
     filtered_tasks = case status do
@@ -197,7 +232,8 @@ defmodule TaskManagerWeb.MCPController do
       result: %{
         tasks: Enum.map(filtered_tasks, &task_to_json/1),
         count: length(filtered_tasks),
-        message: "Showing #{length(filtered_tasks)} private task(s)"
+        message: "Showing #{length(filtered_tasks)} private task(s)",
+        debug_user_id: user_id
       },
       id: id
     })
@@ -365,6 +401,20 @@ defmodule TaskManagerWeb.MCPController do
   end
 
   defp get_user_id(conn) do
-    conn.assigns.current_user["sub"]
+    current_user = conn.assigns[:current_user]
+    Logger.info("get_user_id - current_user: #{inspect(current_user)}")
+    Logger.info("get_user_id - all conn assigns: #{inspect(Map.keys(conn.assigns))}")
+    
+    case current_user do
+      %{"sub" => user_id} -> 
+        Logger.info("get_user_id - extracted user_id from sub: #{inspect(user_id)}")
+        user_id
+      %{id: user_id} -> 
+        Logger.info("get_user_id - extracted user_id from id: #{inspect(user_id)}")
+        user_id
+      _ -> 
+        Logger.warning("get_user_id - no user_id found, returning nil")
+        nil
+    end
   end
 end

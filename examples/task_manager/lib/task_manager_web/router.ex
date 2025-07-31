@@ -19,6 +19,11 @@ defmodule TaskManagerWeb.Router do
     plug TaskManager.Auth.JWTAuth
   end
 
+  pipeline :mcp do
+    plug :accepts, ["json"]
+    plug TaskManager.Auth.MCPAuth
+  end
+
   scope "/", TaskManagerWeb do
     pipe_through :browser
 
@@ -46,7 +51,7 @@ defmodule TaskManagerWeb.Router do
   end
 
   scope "/mcp", TaskManagerWeb do
-    pipe_through :api
+    pipe_through :mcp
 
     post "/", MCPController, :handle_request
   end

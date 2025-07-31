@@ -3,6 +3,7 @@
          ['Elixir.TaskManager.Application','Elixir.TaskManager.Auth',
           'Elixir.TaskManager.Auth.JWTAuth',
           'Elixir.TaskManager.Auth.JWTVerifier',
+          'Elixir.TaskManager.Auth.MCPAuth',
           'Elixir.TaskManager.Auth.SessionAuth','Elixir.TaskManager.Release',
           'Elixir.TaskManager.Repo','Elixir.TaskManager.Tasks',
           'Elixir.TaskManager.Tasks.Task','Elixir.TaskManagerWeb',
