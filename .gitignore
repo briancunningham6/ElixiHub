@@ -59,6 +59,15 @@ npm-debug.log
 /examples/task_manager/erl_crash.dump
 /examples/task_manager/build/
 
+/examples/elixipath/_build/
+/examples/elixipath/deps/
+/examples/elixipath/priv/static/assets/
+/examples/elixipath/priv/static/cache_manifest.json
+/examples/elixipath/assets/node_modules/
+/examples/elixipath/*.tar
+/examples/elixipath/task_manager/erl_crash.dump
+/examples/elixipath/task_manager/build/
+
 # OS generated files
 .DS_Store
 .DS_Store?

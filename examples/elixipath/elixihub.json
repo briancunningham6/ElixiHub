@@ -1,0 +1,46 @@
+{
+  "name": "elixipath",
+  "display_name": "ElixiPath File Server",
+  "version": "1.0.0",
+  "description": "Secure file and media server with organized storage and programmatic access for AI agents",
+  "author": "ElixiHub Team",
+  "category": "files",
+  "port": 4011,
+  "requires_auth": true,
+  "sso_integration": true,
+  "directory_structure": {
+    "shared": "/elixipath/shared",
+    "user_specific": "/elixipath/users/{user_email}"
+  },
+  "features": [
+    "File upload/download with 100MB limit",
+    "Directory browsing and management", 
+    "MIME type validation and security controls",
+    "Copyparty web interface integration",
+    "MCP server for AI agent file operations",
+    "Per-app directory organization",
+    "User isolation and access controls"
+  ],
+  "api_endpoints": {
+    "files": "/api/files",
+    "mcp": "/mcp",
+    "ui": "/ui"
+  },
+  "dependencies": {
+    "python3": ">=3.8",
+    "pip3": "latest",
+    "copyparty": "latest"
+  },
+  "pre_deploy_script": "scripts/install_dependencies.sh",
+  "post_deploy_script": "scripts/configure_copyparty.sh",
+  "environment_variables": {
+    "SECRET_KEY_BASE": "Required - Phoenix secret key (64+ chars)",
+    "PHX_HOST": "Optional - Host domain (default: localhost)",
+    "PORT": "Optional - Port number (default: 4011)",
+    "PHX_SERVER": "Set to 'true' to start server"
+  },
+  "recommended_deploy_path": "/tmp/elixipath",
+  "health_check": "/",
+  "startup_command": "./bin/elixipath_app start",
+  "build_command": "./build.sh"
+}

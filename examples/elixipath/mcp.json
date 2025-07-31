@@ -1,0 +1,101 @@
+{
+  "name": "elixipath",
+  "version": "1.0.0",
+  "description": "File and media server with secure file operations for AI agents",
+  "url": "http://localhost:4011/mcp",
+  "tools": [
+    {
+      "name": "list_files",
+      "description": "List files and directories for the current user",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Directory path to list (relative to user's accessible directories)"
+          },
+          "app_name": {
+            "type": "string",
+            "description": "Filter by application name (optional)"
+          }
+        }
+      }
+    },
+    {
+      "name": "upload_file",
+      "description": "Upload a file to user's directory",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Target file path"
+          },
+          "content": {
+            "type": "string",
+            "description": "Base64 encoded file content"
+          },
+          "app_name": {
+            "type": "string",
+            "description": "Application name"
+          }
+        },
+        "required": ["path", "content", "app_name"]
+      }
+    },
+    {
+      "name": "delete_file",
+      "description": "Delete a file or directory",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "File or directory path to delete"
+          }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "get_file_info",
+      "description": "Get information about a file or directory",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "File or directory path"
+          }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "create_directory",
+      "description": "Create a new directory",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Directory path to create"
+          },
+          "app_name": {
+            "type": "string",
+            "description": "Application name"
+          }
+        },
+        "required": ["path", "app_name"]
+      }
+    },
+    {
+      "name": "get_storage_usage",
+      "description": "Get storage usage statistics for the user",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ]
+}

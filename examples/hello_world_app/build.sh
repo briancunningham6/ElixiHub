@@ -78,8 +78,20 @@ The ElixiHub deployment system will automatically:
 - ELIXIHUB_JWT_SECRET: For authentication integration
 
 ## Port Configuration:
-The application will run on port 4001 by default.
-The MCP endpoint will be available at `/api/mcp`.
+The application will run on port 4006 by default.
+The MCP endpoint will be available at `/mcp`.
+
+## Authentication:
+- SSO authentication via ElixiHub integration
+- JWT token verification with HS512 algorithm
+- Session-based authentication for web UI
+- Development bypass available at `/dev/login`
+
+## ElixiHub Integration:
+- Automatically redirects to ElixiHub for authentication
+- Processes SSO tokens from ElixiHub callbacks
+- Uses shared JWT secret for token verification
+- Supports user roles and permissions
 EOF
 
 # Create the tar file

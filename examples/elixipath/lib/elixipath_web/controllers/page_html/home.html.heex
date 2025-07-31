@@ -1,0 +1,104 @@
+<.header class="text-center">
+  ElixiPath File & Media Server
+  <:subtitle>
+    Secure file management integrated with ElixiHub authentication
+  </:subtitle>
+</.header>
+
+<div class="bg-gray-50 py-10">
+  <div class="mx-auto max-w-2xl">
+    <%= if @user do %>
+      <div class="bg-white shadow rounded-lg p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Welcome, <%= @user.email %></h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div class="bg-blue-50 p-4 rounded-lg">
+            <h3 class="font-medium text-blue-900 mb-2">Your Files</h3>
+            <p class="text-sm text-blue-700 mb-3">Access your personal file directory</p>
+            <a href={"/ui/users/" <> URI.encode(@user.email)} class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+              Browse Your Files →
+            </a>
+          </div>
+          
+          <div class="bg-green-50 p-4 rounded-lg">
+            <h3 class="font-medium text-green-900 mb-2">Shared Files</h3>
+            <p class="text-sm text-green-700 mb-3">Access shared application files</p>
+            <a href="/ui/shared" class="text-green-600 hover:text-green-800 text-sm font-medium">
+              Browse Shared Files →
+            </a>
+          </div>
+        </div>
+
+        <div class="border-t pt-4">
+          <h3 class="font-medium text-gray-900 mb-3">Available Directories</h3>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-gray-600">Shared Directory:</span>
+              <code class="bg-gray-100 px-2 py-1 rounded text-xs"><%= @directories.shared %></code>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-600">Your Directory:</span>
+              <code class="bg-gray-100 px-2 py-1 rounded text-xs"><%= @directories.user_root %></code>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white shadow rounded-lg p-6">
+        <h3 class="font-medium text-gray-900 mb-3">System Status</h3>
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span class="text-gray-600">Copyparty Server:</span>
+            <span class={if @copyparty_status.status == :starting, do: "text-yellow-600", else: "text-green-600"}>
+              <%= String.capitalize(to_string(@copyparty_status.status)) %>
+            </span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">File Server URL:</span>
+            <a href={@copyparty_url} target="_blank" class="text-blue-600 hover:text-blue-800">
+              <%= @copyparty_url %>
+            </a>
+          </div>
+        </div>
+      </div>
+    <% else %>
+      <div class="bg-white shadow rounded-lg p-6 text-center">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Authentication Required</h2>
+        <p class="text-gray-600 mb-6">
+          Please log in through ElixiHub to access your files.
+        </p>
+        <a 
+          href="/sso/authenticate" 
+          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+        >
+          Login with ElixiHub
+        </a>
+      </div>
+    <% end %>
+  </div>
+</div>
+
+<div class="bg-white py-10">
+  <div class="mx-auto max-w-2xl">
+    <div class="text-center">
+      <h2 class="text-2xl font-bold text-gray-900 mb-4">Features</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="p-4">
+          <div class="text-3xl mb-2">🔐</div>
+          <h3 class="font-semibold mb-2">Secure Access</h3>
+          <p class="text-sm text-gray-600">Integrated with ElixiHub authentication system</p>
+        </div>
+        <div class="p-4">
+          <div class="text-3xl mb-2">📁</div>
+          <h3 class="font-semibold mb-2">Organized Storage</h3>
+          <p class="text-sm text-gray-600">Separate user and shared directories with app-specific folders</p>
+        </div>
+        <div class="p-4">
+          <div class="text-3xl mb-2">🤖</div>
+          <h3 class="font-semibold mb-2">AI Integration</h3>
+          <p class="text-sm text-gray-600">MCP server for programmatic file operations</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

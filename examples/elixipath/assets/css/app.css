@@ -1,0 +1,103 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+/* This file is for your main application CSS */
+.text-brand { @apply text-orange-600; }
+.bg-brand { @apply bg-orange-600; }
+.bg-brand\/5 { @apply bg-orange-50; }
+
+/* Flash messages */
+.phx-flash {
+  @apply fixed top-4 right-4 z-50 max-w-sm p-4 rounded-lg shadow-lg;
+}
+
+.phx-flash.phx-flash-info {
+  @apply bg-blue-50 text-blue-800 border border-blue-200;
+}
+
+.phx-flash.phx-flash-error {
+  @apply bg-red-50 text-red-800 border border-red-200;
+}
+
+/* Loading states */
+.phx-submit-loading {
+  @apply opacity-75;
+}
+
+/* LiveView specific styles */
+.phx-no-feedback.invalid-feedback,
+.phx-no-feedback .invalid-feedback {
+  display: none;
+}
+
+.phx-click-loading {
+  @apply opacity-75 transition-opacity;
+}
+
+.phx-loading {
+  cursor: wait;
+}
+
+/* File upload styles */
+.file-upload-area {
+  @apply border-2 border-dashed border-gray-300 rounded-lg p-6 text-center;
+  transition: border-color 0.2s ease;
+}
+
+.file-upload-area:hover {
+  @apply border-blue-400;
+}
+
+.file-upload-area.dragover {
+  @apply border-blue-500 bg-blue-50;
+}
+
+/* File list styles */
+.file-item {
+  @apply flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50;
+}
+
+.file-icon {
+  @apply flex-shrink-0 w-8 h-8 mr-3;
+}
+
+.file-info {
+  @apply flex-grow;
+}
+
+.file-name {
+  @apply font-medium text-gray-900;
+}
+
+.file-meta {
+  @apply text-sm text-gray-500;
+}
+
+.file-actions {
+  @apply flex space-x-2;
+}
+
+/* Directory breadcrumbs */
+.breadcrumb {
+  @apply flex items-center space-x-2 text-sm text-gray-600;
+}
+
+.breadcrumb-item {
+  @apply hover:text-blue-600;
+}
+
+.breadcrumb-separator {
+  @apply text-gray-400;
+}
+
+/* Responsive utilities */
+@media (max-width: 640px) {
+  .file-item {
+    @apply flex-col items-start space-y-2;
+  }
+  
+  .file-actions {
+    @apply w-full justify-end;
+  }
+}

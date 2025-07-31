@@ -67,3 +67,9 @@ config :phoenix, :plug_init_mode, :runtime
 
 # Include HEEx debug annotations as HTML comments in rendered markup
 config :phoenix_live_view, :debug_heex_annotations, true
+
+# ElixiHub authentication configuration
+config :hello_world_app, :elixihub_auth,
+  shared_secret: "dev_secret_key_32_chars_long_exactly_for_jwt_signing",
+  elixihub_url: "http://localhost:4005",
+  app_name: "HelloWorldApp"

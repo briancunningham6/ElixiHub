@@ -8,6 +8,7 @@ defmodule HelloWorldAppWeb.Router do
     plug :put_root_layout, html: {HelloWorldAppWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug HelloWorldApp.Auth.ElixiHubAuth.SessionAuth
   end
 
   pipeline :api do
@@ -29,6 +30,17 @@ defmodule HelloWorldAppWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    get "/sso/authenticate", HelloWorldApp.Auth.ElixiHubAuth.SSOController, :authenticate
+    get "/sso/logout", HelloWorldApp.Auth.ElixiHubAuth.SSOController, :logout
+  end
+
+  # Development-only routes (no authentication required)
+  if Mix.env() == :dev do
+    scope "/dev", HelloWorldAppWeb do
+      pipe_through :browser
+      
+      get "/login", HelloWorldApp.Auth.ElixiHubAuth.SSOController, :dev_login
+    end
   end
 
   # Public API endpoints

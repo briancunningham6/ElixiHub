@@ -1,0 +1,41 @@
+{
+  "name": "elixipath",
+  "description": "ElixiPath File & Media Server - Secure file management integrated with ElixiHub",
+  "version": "1.0.0",
+  "port": 4011,
+  "health_check": "/",
+  "roles": [
+    {
+      "identifier": "elixipath_user",
+      "name": "ElixiPath User",
+      "description": "ElixiPath authenticated user with file access",
+      "permissions": {
+        "read": true,
+        "write": true,
+        "admin": false
+      }
+    },
+    {
+      "identifier": "elixipath_admin", 
+      "name": "ElixiPath Admin",
+      "description": "ElixiPath administrator with full system access",
+      "permissions": {
+        "read": true,
+        "write": true,
+        "admin": true
+      }
+    }
+  ],
+  "mcp": {
+    "enabled": true,
+    "endpoint": "/mcp",
+    "tools": [
+      "list_files",
+      "upload_file", 
+      "delete_file",
+      "get_file_info",
+      "create_directory",
+      "get_storage_usage"
+    ]
+  }
+}
