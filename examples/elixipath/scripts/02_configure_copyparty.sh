@@ -24,26 +24,16 @@ fi
 CONFIG_DIR="$DEPLOY_DIR/copyparty_config"
 mkdir -p "$CONFIG_DIR"
 
-# Create copyparty configuration file
-echo "📝 Creating copyparty configuration..."
-cat > "$CONFIG_DIR/copyparty.conf" << EOF
-# ElixiPath Copyparty Configuration
-# Generated automatically during deployment
+# Create ElixiPath directories
+echo "📁 Creating ElixiPath directories..."
+mkdir -p "$ELIXIPATH_DIR"
 
-# Server settings
--p 8080
--i 127.0.0.1
-
-# Directory mappings
--v $ELIXIPATH_DIR/shared:/shared:rw
--v $ELIXIPATH_DIR/users:/users:rw
-
-# Authentication via header (ElixiPath will set X-Remote-User)
---idp-h-usr X-Remote-User
-
-# Security settings
---no-robots
-EOF
+# Note: copyparty configuration is handled via command line arguments
+echo "📝 Copyparty will be configured with:"
+echo "  - Port: 8080"
+echo "  - Interface: 127.0.0.1"
+echo "  - Volume: $ELIXIPATH_DIR mapped to /"
+echo "  - Authentication: X-Remote-User header from ElixiPath"
 
 # No authentication handler needed - using header-based auth
 
@@ -70,7 +60,7 @@ if [ -f "copyparty.pid" ]; then
 fi
 
 echo "Starting copyparty for ElixiPath with authentication..."
-python3 -m copyparty -c "$CONFIG_DIR/copyparty.conf" > "$DEPLOY_DIR/logs/copyparty.log" 2>&1 &
+python3 -m copyparty -i 127.0.0.1 -p 8080 --idp-h-usr "X-Remote-User" -v "$ELIXIPATH_DIR:/:rwda" > "$DEPLOY_DIR/logs/copyparty.log" 2>&1 &
 COPYPARTY_PID=\$!
 
 echo "Copyparty started with PID: \$COPYPARTY_PID"
@@ -128,14 +118,12 @@ echo ""
 echo "📋 Configuration Summary:"
 echo "  Config directory: $CONFIG_DIR"
 echo "  Data directory: $ELIXIPATH_DIR"
-echo "  Authentication: JWT token validation"
+echo "  Authentication: Header-based (X-Remote-User)"
 echo "  Port: 8080 (internal)"
 echo ""
-echo "🚀 To start copyparty manually:"
-echo "  $CONFIG_DIR/start_copyparty.sh"
-echo ""
-echo "🛑 To stop copyparty:"
-echo "  $CONFIG_DIR/stop_copyparty.sh"
+echo "🚀 Management scripts:"
+echo "  Start: $CONFIG_DIR/start_copyparty.sh"
+echo "  Stop:  $CONFIG_DIR/stop_copyparty.sh"
 echo ""
 
 # Start copyparty automatically during deployment
@@ -148,9 +136,8 @@ if [ -f "$DEPLOY_DIR/copyparty.pid" ]; then
     if kill -0 "$COPYPARTY_PID" 2>/dev/null; then
         echo "✅ Copyparty started successfully with PID: $COPYPARTY_PID"
         echo "🌐 Accessible at: http://127.0.0.1:8080"
-        echo "📁 Serving directories:"
-        echo "   /shared → $ELIXIPATH_DIR/shared"
-        echo "   /users  → $ELIXIPATH_DIR/users"
+        echo "📁 Serving directory: $ELIXIPATH_DIR"
+        echo "🔐 Authentication: X-Remote-User header"
     else
         echo "❌ Copyparty failed to start"
         exit 1
@@ -158,4 +145,13 @@ if [ -f "$DEPLOY_DIR/copyparty.pid" ]; then
 else
     echo "❌ Copyparty PID file not found"
     exit 1
+fi
+
+# Run deployment verification
+echo ""
+echo "🔍 Running deployment verification..."
+if [ -f "$DEPLOY_DIR/scripts/03_verify_deployment.sh" ]; then
+    "$DEPLOY_DIR/scripts/03_verify_deployment.sh" "$DEPLOY_DIR"
+else
+    echo "⚠️  Verification script not found, skipping verification"
 fi
