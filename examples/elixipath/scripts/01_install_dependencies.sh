@@ -24,7 +24,12 @@ if command_exists python3; then
     echo "Found Python $PYTHON_VERSION"
     
     # Check if version is 3.8 or higher
-    if [ "$(echo "$PYTHON_VERSION >= 3.8" | bc -l 2>/dev/null || echo 0)" = "1" ]; then
+    # Convert version to comparable format (e.g., 3.13 -> 313, 3.8 -> 38)
+    PYTHON_MAJOR=$(echo "$PYTHON_VERSION" | cut -d. -f1)
+    PYTHON_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f2)
+    VERSION_NUM=$((PYTHON_MAJOR * 100 + PYTHON_MINOR))
+    
+    if [ "$VERSION_NUM" -ge 308 ]; then
         echo "✅ Python version is sufficient"
     else
         echo "❌ Python 3.8+ required, found $PYTHON_VERSION"
@@ -55,10 +60,10 @@ if pip3 show copyparty >/dev/null 2>&1; then
     echo "Current version: $CURRENT_VERSION"
     
     echo "🔄 Upgrading copyparty to latest version..."
-    pip3 install --upgrade copyparty --user
+    pip3 install --upgrade copyparty --user --break-system-packages
 else
     echo "📦 Installing copyparty..."
-    pip3 install copyparty --user
+    pip3 install copyparty --user --break-system-packages
 fi
 
 # Verify installation

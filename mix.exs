@@ -63,7 +63,8 @@ defmodule Elixihub.MixProject do
       {:guardian_phoenix, "~> 2.0"},
       {:guardian_db, "~> 2.1"},
       {:bodyguard, "~> 2.4"},
-      {:httpoison, "~> 2.0"}
+      {:httpoison, "~> 2.0"},
+      {:joken, "~> 2.5"}
     ]
   end
 

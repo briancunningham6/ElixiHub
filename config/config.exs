@@ -61,6 +61,9 @@ config :logger, :console,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Configure Joken to use Jason for JSON parsing
+config :joken, :json_library, Jason
+
 # Configure MIME types for deployment uploads
 config :mime, :types, %{
   "application/x-tar" => ["tar"],

@@ -10,13 +10,13 @@ defmodule Elixihub.Deployment do
 
   @doc """
   Deploys an application to a remote server via SSH.
-  
+
   ## Parameters
   - ssh_config: SSH configuration map
   - tar_path: Path to the tar file to deploy  
   - deploy_path: Remote path where app should be deployed
   - app: The app being deployed
-  
+
   ## Returns
   - {:ok, deployment_log} on success
   - {:error, reason} on failure
@@ -25,9 +25,10 @@ defmodule Elixihub.Deployment do
     deploy_app(ssh_config, tar_path, deploy_path, app, nil)
   end
 
-  def deploy_app(ssh_config, tar_path, deploy_path, %App{} = app, host_architecture) when is_map(ssh_config) do
+  def deploy_app(ssh_config, tar_path, deploy_path, %App{} = app, host_architecture)
+      when is_map(ssh_config) do
     full_ssh_config = Map.put(ssh_config, :deploy_path, deploy_path)
-    
+
     with {:ok, _} <- validate_tar_file(tar_path),
          {:ok, _} <- validate_ssh_config(full_ssh_config),
          {:ok, _} <- update_deployment_status(app, "deploying"),
@@ -37,6 +38,7 @@ defmodule Elixihub.Deployment do
          {:ok, roles} <- RoleParser.extract_roles(conn, deploy_path),
          {:ok, _} <- sync_app_roles(app, roles),
          {:ok, result} <- AppInstaller.install_app(conn, app, deploy_path, host_architecture),
+         {:ok, _} <- execute_post_deploy_scripts(conn, app, deploy_path),
          {:ok, _} <- register_mcp_server(app, conn, deploy_path),
          {:ok, _} <- SSHClient.disconnect(conn),
          {:ok, _} <- update_deployment_status(app, "deployed") do
@@ -52,7 +54,7 @@ defmodule Elixihub.Deployment do
 
   @doc """
   Deploys an application to a remote server via SSH (legacy signature).
-  
+
   ## Parameters
   - app: The app to deploy
   - tar_path: Path to the tar file to deploy
@@ -63,7 +65,7 @@ defmodule Elixihub.Deployment do
     - password: SSH password (optional if using key)
     - private_key: SSH private key path (optional)
     - deploy_path: Remote path where app should be deployed
-  
+
   ## Returns
   - {:ok, deployment_log} on success
   - {:error, reason} on failure
@@ -81,7 +83,9 @@ defmodule Elixihub.Deployment do
          {:ok, _} <- TarHandler.upload_and_extract(conn, tar_path, ssh_config.deploy_path),
          {:ok, roles} <- RoleParser.extract_roles(conn, ssh_config.deploy_path),
          {:ok, _} <- sync_app_roles(app, roles),
-         {:ok, result} <- AppInstaller.install_app(conn, app, ssh_config.deploy_path, host_architecture),
+         {:ok, result} <-
+           AppInstaller.install_app(conn, app, ssh_config.deploy_path, host_architecture),
+         {:ok, _} <- execute_post_deploy_scripts(conn, app, ssh_config.deploy_path),
          {:ok, _} <- register_mcp_server(app, conn, ssh_config.deploy_path),
          {:ok, _} <- SSHClient.disconnect(conn),
          {:ok, _} <- update_deployment_status(app, "deployed") do
@@ -97,11 +101,11 @@ defmodule Elixihub.Deployment do
 
   @doc """
   Undeploys an application from a remote server via SSH.
-  
+
   ## Parameters
   - app: The app to undeploy
   - ssh_config: SSH configuration map
-  
+
   ## Returns
   - {:ok, undeploy_result} on success
   - {:error, reason} on failure
@@ -113,12 +117,12 @@ defmodule Elixihub.Deployment do
   def undeploy_app(%App{} = app, ssh_config, host_architecture) when is_map(ssh_config) do
     # Use the actual deployment path that was stored during deployment
     extract_path = app.deploy_path || AppInstaller.get_deployment_path(app)
-    
+
     IO.puts("Starting undeployment for app: #{app.name}")
     IO.puts("Using extract_path: #{extract_path}")
     IO.puts("SSH config: #{inspect(ssh_config)}")
     IO.puts("Host architecture: #{host_architecture}")
-    
+
     with {:ok, _} <- validate_ssh_config_for_undeploy(ssh_config),
          {:ok, _} <- update_deployment_status(app, "undeploying"),
          {:ok, conn} <- SSHClient.connect(ssh_config),
@@ -152,13 +156,17 @@ defmodule Elixihub.Deployment do
   """
   def get_deployment_log(%App{} = app) do
     case app.deployment_log do
-      log when is_list(log) -> log
-      log when is_map(log) -> 
+      log when is_list(log) ->
+        log
+
+      log when is_map(log) ->
         # Convert map to list format for backwards compatibility
-        Enum.map(log, fn {step, message} -> 
+        Enum.map(log, fn {step, message} ->
           %{step: step, message: message, timestamp: DateTime.utc_now(), level: :info}
         end)
-      _ -> []
+
+      _ ->
+        []
     end
   end
 
@@ -166,22 +174,31 @@ defmodule Elixihub.Deployment do
   Adds an entry to the deployment log.
   """
   def add_deployment_log(%App{} = app, entry) do
-    current_log = case app.deployment_log do
-      log when is_list(log) -> log
-      log when is_map(log) -> 
-        # Convert existing map to list format
-        Enum.map(log, fn {step, message} -> 
-          %{step: step, message: message, timestamp: DateTime.utc_now(), level: :info}
-        end)
-      _ -> []
-    end
-    
-    new_log = current_log ++ [%{
-      timestamp: DateTime.utc_now(),
-      message: entry,
-      level: :info
-    }]
-    
+    current_log =
+      case app.deployment_log do
+        log when is_list(log) ->
+          log
+
+        log when is_map(log) ->
+          # Convert existing map to list format
+          Enum.map(log, fn {step, message} ->
+            %{step: step, message: message, timestamp: DateTime.utc_now(), level: :info}
+          end)
+
+        _ ->
+          []
+      end
+
+    new_log =
+      current_log ++
+        [
+          %{
+            timestamp: DateTime.utc_now(),
+            message: entry,
+            level: :info
+          }
+        ]
+
     Elixihub.Apps.update_app(app, %{deployment_log: new_log})
   end
 
@@ -190,15 +207,16 @@ defmodule Elixihub.Deployment do
   """
   def validate_ssh_config(config) do
     required_keys = [:host, :username, :deploy_path]
-    
+
     case Enum.find(required_keys, fn key -> not Map.has_key?(config, key) end) do
-      nil -> 
+      nil ->
         if Map.has_key?(config, :password) or Map.has_key?(config, :private_key) do
           {:ok, config}
         else
           {:error, "Either password or private_key must be provided"}
         end
-      missing_key -> 
+
+      missing_key ->
         {:error, "Missing required SSH config key: #{missing_key}"}
     end
   end
@@ -208,15 +226,16 @@ defmodule Elixihub.Deployment do
   """
   def validate_ssh_config_for_undeploy(config) do
     required_keys = [:host, :username]
-    
+
     case Enum.find(required_keys, fn key -> not Map.has_key?(config, key) end) do
-      nil -> 
+      nil ->
         if Map.has_key?(config, :password) or Map.has_key?(config, :private_key) do
           {:ok, config}
         else
           {:error, "Either password or private_key must be provided"}
         end
-      missing_key -> 
+
+      missing_key ->
         {:error, "Missing required SSH config key: #{missing_key}"}
     end
   end
@@ -228,8 +247,10 @@ defmodule Elixihub.Deployment do
     case File.stat(tar_path) do
       {:ok, %File.Stat{type: :regular}} ->
         {:ok, tar_path}
+
       {:ok, %File.Stat{type: type}} ->
         {:error, "Expected regular file, got #{type}"}
+
       {:error, reason} ->
         {:error, "Cannot access tar file: #{inspect(reason)}"}
     end
@@ -247,11 +268,12 @@ defmodule Elixihub.Deployment do
   Gets deployment statistics.
   """
   def get_deployment_stats do
-    query = from(a in App, 
-      group_by: a.deployment_status,
-      select: {a.deployment_status, count(a.id)}
-    )
-    
+    query =
+      from(a in App,
+        group_by: a.deployment_status,
+        select: {a.deployment_status, count(a.id)}
+      )
+
     Repo.all(query)
     |> Enum.into(%{})
   end
@@ -261,16 +283,19 @@ defmodule Elixihub.Deployment do
   defp sync_app_roles(%App{} = app, roles) when is_list(roles) do
     # Sync to app_roles table only - app roles should not be system roles
     case Elixihub.Apps.sync_app_roles(app.id, roles) do
-      {:ok, _} -> 
-        add_deployment_log(app, "Synced #{length(roles)} app role(s): #{Enum.map(roles, & &1.name) |> Enum.join(", ")}")
+      {:ok, _} ->
+        add_deployment_log(
+          app,
+          "Synced #{length(roles)} app role(s): #{Enum.map(roles, & &1.name) |> Enum.join(", ")}"
+        )
+
         {:ok, :roles_synced}
-        
+
       {:error, reason} ->
         add_deployment_log(app, "Failed to sync app roles: #{inspect(reason)}")
         {:error, reason}
     end
   end
-
 
   defp log_deployment_success(app, result) do
     add_deployment_log(app, "Deployment completed successfully: #{inspect(result)}")
@@ -292,19 +317,30 @@ defmodule Elixihub.Deployment do
     case MCPParser.extract_mcp_info(connection, deploy_path, app) do
       {:ok, mcp_config} ->
         tools = Map.get(mcp_config, :tools, [])
+
         case Elixihub.MCP.register_mcp_server_for_app(app, mcp_config, tools) do
           {:ok, server} ->
             server_name = Map.get(server, :name, "unknown")
-            tools_count = case Map.get(server, :tools, []) do
-              tools when is_list(tools) -> length(tools)
-              _ -> 0
-            end
-            add_deployment_log(app, "Registered MCP server: #{server_name} with #{tools_count} tools")
+
+            tools_count =
+              case Map.get(server, :tools, []) do
+                tools when is_list(tools) -> length(tools)
+                _ -> 0
+              end
+
+            add_deployment_log(
+              app,
+              "Registered MCP server: #{server_name} with #{tools_count} tools"
+            )
+
             {:ok, :mcp_registered}
+
           {:error, reason} ->
             add_deployment_log(app, "Failed to register MCP server: #{inspect(reason)}")
-            {:ok, :mcp_registration_failed}  # Don't fail deployment for this
+            # Don't fail deployment for this
+            {:ok, :mcp_registration_failed}
         end
+
       {:error, reason} ->
         add_deployment_log(app, "No MCP configuration found: #{inspect(reason)}")
         {:ok, :no_mcp_config}
@@ -316,74 +352,219 @@ defmodule Elixihub.Deployment do
       {:ok, _} ->
         add_deployment_log(app, "Unregistered MCP server for app: #{app.name}")
         {:ok, :mcp_unregistered}
+
       {:error, reason} ->
         add_deployment_log(app, "Failed to unregister MCP server: #{inspect(reason)}")
-        {:ok, :mcp_unregistration_failed}  # Don't fail undeployment for this
+        # Don't fail undeployment for this
+        {:ok, :mcp_unregistration_failed}
     end
+  end
+
+  defp execute_post_deploy_scripts(connection, app, deploy_path) do
+    add_deployment_log(app, "🔍 Checking for post-deploy scripts...")
+    add_deployment_log(app, "📁 Looking in directory: #{deploy_path}/scripts")
+
+    scripts_path = "#{deploy_path}/scripts"
+
+    # First, let's see what files exist in the deploy path
+    case SSHClient.execute_command(connection, "ls -la #{deploy_path}") do
+      {:ok, {stdout, _stderr, 0}} ->
+        add_deployment_log(app, "📂 Deploy directory contents: #{String.trim(stdout)}")
+      {:ok, {_stdout, stderr, exit_code}} ->
+        add_deployment_log(app, "⚠️ Could not list deploy directory (exit #{exit_code}): #{stderr}")
+      {:error, reason} ->
+        add_deployment_log(app, "❌ Failed to list deploy directory: #{inspect(reason)}")
+    end
+
+    case SSHClient.execute_command(connection, "test -d #{scripts_path}") do
+      {:ok, {_stdout, _stderr, 0}} ->
+        add_deployment_log(app, "Found scripts directory, executing post-deploy scripts...")
+
+        # Get list of .sh files in scripts directory, sorted alphabetically
+        case SSHClient.execute_command(connection, "find #{scripts_path} -name '*.sh' -type f | sort") do
+          {:ok, {output, _stderr, 0}} when output != "" ->
+            scripts = String.split(String.trim(output), "\n")
+            add_deployment_log(app, "📋 Found #{length(scripts)} script(s): #{Enum.map(scripts, &Path.basename/1) |> Enum.join(", ")}")
+            execute_scripts_sequentially(connection, app, scripts, deploy_path)
+
+          {:ok, {"", _stderr, 0}} ->
+            add_deployment_log(app, "No shell scripts found in scripts directory")
+            {:ok, :no_scripts_found}
+
+          {:error, reason} ->
+            add_deployment_log(app, "Failed to list scripts: #{inspect(reason)}")
+            {:error, "Failed to list post-deploy scripts: #{inspect(reason)}"}
+        end
+
+      {:error, _} ->
+        add_deployment_log(app, "No scripts directory found, skipping post-deploy scripts")
+        {:ok, :no_scripts_directory}
+    end
+  end
+
+  defp execute_scripts_sequentially(connection, app, scripts, deploy_path) do
+    results =
+      Enum.map(scripts, fn script_path ->
+        script_name = Path.basename(script_path)
+        add_deployment_log(app, "🔧 Executing post-deploy script: #{script_name}")
+
+        # Make script executable and run it from the deployment directory
+        commands = [
+          "chmod +x #{script_path}",
+          "cd #{deploy_path} && bash -x #{script_path} #{deploy_path} 2>&1"
+        ]
+
+        case execute_script_commands(connection, commands) do
+          {:ok, output} ->
+            add_deployment_log(app, "✅ Script #{script_name} completed successfully")
+            
+            # Always log the output, even if empty, to see what happened
+            trimmed_output = String.trim(output)
+            if trimmed_output != "" do
+              add_deployment_log(app, "📝 Script #{script_name} output:")
+              # Split output into lines to make it more readable
+              String.split(trimmed_output, "\n")
+              |> Enum.each(fn line -> 
+                add_deployment_log(app, "  #{line}")
+              end)
+            else
+              add_deployment_log(app, "📝 Script #{script_name} produced no output")
+            end
+
+            {:ok, script_name}
+
+          {:error, reason} ->
+            add_deployment_log(app, "❌ Script #{script_name} failed: #{inspect(reason)}")
+            {:error, "Post-deploy script #{script_name} failed: #{inspect(reason)}"}
+        end
+      end)
+
+    # Check if any scripts failed
+    case Enum.find(results, fn result -> match?({:error, _}, result) end) do
+      nil ->
+        successful_count = length(Enum.filter(results, fn result -> match?({:ok, _}, result) end))
+
+        add_deployment_log(
+          app,
+          "✅ All #{successful_count} post-deploy scripts completed successfully"
+        )
+
+        {:ok, :all_scripts_completed}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp execute_script_commands(connection, commands) do
+    # Execute commands sequentially, stopping on first failure
+    Enum.reduce_while(commands, {:ok, ""}, fn command, {:ok, acc_output} ->
+      case SSHClient.execute_command(connection, command) do
+        {:ok, {stdout, stderr, 0}} ->
+          # Combine stdout and stderr for complete output
+          combined_output = case {stdout, stderr} do
+            {"", ""} -> ""
+            {out, ""} -> out
+            {"", err} -> err
+            {out, err} -> out <> "\n" <> err
+          end
+          {:cont, {:ok, acc_output <> combined_output}}
+
+        {:ok, {stdout, stderr, exit_code}} ->
+          error_msg = "Command failed with exit code #{exit_code}: #{command}"
+          full_output = case {stdout, stderr} do
+            {"", ""} -> "no output"
+            {out, ""} -> "output: #{out}"
+            {"", err} -> "stderr: #{err}"
+            {out, err} -> "stdout: #{out}, stderr: #{err}"
+          end
+          {:halt, {:error, "#{error_msg}. #{full_output}"}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
   end
 
   defp stop_existing_service_if_running(connection, app, host_architecture \\ nil) do
     add_deployment_log(app, "Checking for existing running service...")
-    
+
     case AppInstaller.get_app_service_status(connection, app, host_architecture) do
       {:ok, "active"} ->
-        add_deployment_log(app, "Found active service. Stopping existing service before deployment...")
+        add_deployment_log(
+          app,
+          "Found active service. Stopping existing service before deployment..."
+        )
+
         case AppInstaller.stop_app_service(connection, app, host_architecture) do
           {:ok, :stopped} ->
             add_deployment_log(app, "Successfully stopped existing service")
             # Wait a moment for the service to fully stop
             :timer.sleep(3000)
             {:ok, :service_stopped}
-          
+
           {:error, reason} ->
             add_deployment_log(app, "Failed to stop existing service: #{inspect(reason)}")
             {:error, "Failed to stop existing service: #{inspect(reason)}"}
         end
-      
+
       {:ok, "activating"} ->
         add_deployment_log(app, "Found service in activating state. Stopping...")
+
         case AppInstaller.stop_app_service(connection, app, host_architecture) do
           {:ok, :stopped} ->
             add_deployment_log(app, "Successfully stopped activating service")
             :timer.sleep(3000)
             {:ok, :service_stopped}
-          
+
           {:error, reason} ->
             add_deployment_log(app, "Failed to stop activating service: #{inspect(reason)}")
             {:error, "Failed to stop activating service: #{inspect(reason)}"}
         end
-      
+
       {:ok, "failed"} ->
         add_deployment_log(app, "Found failed service. Attempting to stop...")
+
         case AppInstaller.stop_app_service(connection, app) do
           {:ok, :stopped} ->
             add_deployment_log(app, "Successfully stopped failed service")
             {:ok, :service_stopped}
-          
+
           {:error, reason} ->
             add_deployment_log(app, "Warning: Could not stop failed service: #{inspect(reason)}")
-            {:ok, :service_was_failed}  # Don't fail deployment for this
+            # Don't fail deployment for this
+            {:ok, :service_was_failed}
         end
-      
+
       {:ok, "inactive"} ->
         add_deployment_log(app, "Service is inactive, no need to stop")
         {:ok, :service_already_stopped}
-      
+
       {:ok, status} ->
         add_deployment_log(app, "Service status: #{status}. Attempting to stop as precaution...")
+
         case AppInstaller.stop_app_service(connection, app) do
           {:ok, :stopped} ->
             add_deployment_log(app, "Successfully stopped service (was #{status})")
             {:ok, :service_stopped}
-          
+
           {:error, reason} ->
-            add_deployment_log(app, "Warning: Could not stop service in #{status} state: #{inspect(reason)}")
-            {:ok, :service_stop_warning}  # Don't fail deployment for this
+            add_deployment_log(
+              app,
+              "Warning: Could not stop service in #{status} state: #{inspect(reason)}"
+            )
+
+            # Don't fail deployment for this
+            {:ok, :service_stop_warning}
         end
-      
+
       {:error, reason} ->
         # Service probably doesn't exist yet - this is fine for new deployments
-        add_deployment_log(app, "Could not check service status (likely first deployment): #{inspect(reason)}")
+        add_deployment_log(
+          app,
+          "Could not check service status (likely first deployment): #{inspect(reason)}"
+        )
+
         {:ok, :no_existing_service}
     end
   end

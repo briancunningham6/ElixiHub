@@ -16,17 +16,26 @@ defmodule ElixiPath.Auth.JWTVerifier do
       secret = @shared_secret
       Logger.info("Using secret: #{String.slice(secret, 0, 10)}...")
 
-      # Use JOSE to verify the JWT with the same algorithm Guardian uses (HS512)
+      # Use Joken to verify the JWT with the same algorithm Guardian uses (HS512)
       signer = Joken.Signer.create("HS512", secret)
       
-      case JOSE.JWT.verify(signer.jwk, token) do
-        {true, %JOSE.JWT{fields: claims}, _jws} ->
+      case Joken.verify(token, signer) do
+        {:ok, claims} ->
           Logger.info("JWT verification successful for user: #{claims["sub"]}")
           Logger.info("Claims: #{inspect(claims)}")
           {:ok, claims}
-        {false, _, _} ->
-          Logger.error("JWT verification failed: invalid signature")
-          {:error, :invalid_signature}
+        {:error, reason} ->
+          Logger.error("JWT verification failed: #{inspect(reason)}")
+          
+          # Try to peek at the token structure for debugging
+          case Joken.peek_claims(token) do
+            {:ok, peek_claims} ->
+              Logger.info("Token structure is valid, claims peek: #{inspect(peek_claims)}")
+            {:error, peek_error} ->
+              Logger.error("Token structure is invalid: #{inspect(peek_error)}")
+          end
+          
+          {:error, reason}
       end
     rescue
       error ->
@@ -38,14 +47,17 @@ defmodule ElixiPath.Auth.JWTVerifier do
 
   def generate_token(claims) do
     try do
-      # Use JOSE directly like Task Manager
+      # Use Joken with HS512 to match ElixiHub's Guardian configuration
       secret = @shared_secret
-      jwk = JOSE.JWK.from_oct(secret)
+      signer = Joken.Signer.create("HS512", secret)
       
-      case JOSE.JWT.sign(jwk, %{"alg" => "HS256"}, claims) do
-        {_jws, token} -> {:ok, token}
-        error -> 
-          Logger.error("Token generation failed: #{inspect(error)}")
+      # Create a basic config for token generation
+      config = Joken.Config.default_claims(default_exp: 3600) 
+      
+      case Joken.generate_and_sign(config, claims, signer) do
+        {:ok, token, _claims} -> {:ok, token}
+        {:error, reason} -> 
+          Logger.error("Token generation failed: #{inspect(reason)}")
           {:error, :token_generation_failed}
       end
     rescue

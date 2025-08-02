@@ -18,8 +18,7 @@ defmodule ElixiPathWeb.Router do
 
   pipeline :copyparty_proxy do
     plug :accepts, ["html", "json"]
-    plug :fetch_session
-    plug ElixiPath.Auth.SessionAuth
+    # No session handling at all for copyparty
   end
 
   pipeline :dev_only do
@@ -34,6 +33,11 @@ defmodule ElixiPathWeb.Router do
   pipeline :mcp do
     plug :accepts, ["json"]
     plug ElixiPath.Auth.MCPAuth
+  end
+
+  pipeline :static_assets do
+    plug :accepts, ["html", "css", "js", "json", "text"]
+    plug :fetch_session
   end
 
   scope "/", ElixiPathWeb do
@@ -54,9 +58,9 @@ defmodule ElixiPathWeb.Router do
     end
   end
 
-  # Copyparty UI proxy - authenticated access
+  # Copyparty UI proxy - with proper authentication
   scope "/ui", ElixiPathWeb do
-    pipe_through :copyparty_proxy
+    pipe_through :browser
     
     get "/*path", CopypartyController, :proxy
     post "/*path", CopypartyController, :proxy

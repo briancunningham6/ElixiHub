@@ -1,0 +1,2 @@
+2025-08-02 00:50:14,252 - WARNING - Invalid JWT token: Invalid audience
+2025-08-02 00:50:38,072 - INFO - Authenticated user: admin@example.com

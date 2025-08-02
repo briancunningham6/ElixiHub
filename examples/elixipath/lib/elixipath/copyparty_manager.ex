@@ -5,7 +5,7 @@ defmodule ElixiPath.CopypartyManager do
   use GenServer
   require Logger
 
-  @copyparty_port 8090
+  @copyparty_port 8080
   @base_path Path.join([System.user_home(), "elixipath"])
 
   def start_link(_opts) do
@@ -98,19 +98,16 @@ defmodule ElixiPath.CopypartyManager do
     
     args = [
       "-m", "copyparty",
-      "--port", "#{@copyparty_port}",
-      "--auth-cgi", auth_script_path(),
-      "--no-robots",
-      "--css", "",
-      "--js", "",
-      @base_path
+      "-p", "#{@copyparty_port}",
+      "-v", ".::",
+      "--no-robots"
     ]
 
     port = Port.open({:spawn_executable, System.find_executable("python3")}, [
       :binary,
       :exit_status,
       args: args,
-      cd: System.tmp_dir()
+      cd: @base_path
     ])
 
     Process.link(port)
@@ -181,7 +178,8 @@ if __name__ == "__main__":
   end
 
   def get_status do
-    GenServer.call(__MODULE__, :get_status)
+    # Return a static status since we're using production copyparty
+    %{port: nil, status: :external}
   end
 
   def handle_call(:get_status, _from, state) do

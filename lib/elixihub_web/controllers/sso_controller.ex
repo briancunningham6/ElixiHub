@@ -105,9 +105,9 @@ defmodule ElixihubWeb.SSOController do
   defp generate_sso_token_and_redirect(conn, user, return_url) do
     Logger.info("Generating SSO token for user: #{user.id}")
 
-    # Generate a JWT token for the user
-    case Elixihub.Guardian.encode_and_sign(user) do
-      {:ok, token, _claims} ->
+    # Generate a JWT token for the user using Joken for ElixiPath compatibility
+    case Elixihub.SSOJWT.generate_sso_token(user) do
+      {:ok, token} ->
         Logger.info("Successfully generated SSO token")
 
         # Parse return URL to add token parameter

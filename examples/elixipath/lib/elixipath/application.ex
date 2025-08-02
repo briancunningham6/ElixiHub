@@ -13,8 +13,8 @@ defmodule ElixiPath.Application do
       {Phoenix.PubSub, name: ElixiPath.PubSub},
       # Start the Finch HTTP client for sending emails
       {Finch, name: ElixiPath.Finch},
-      # Start Copyparty subprocess manager
-      ElixiPath.CopypartyManager,
+      # Start Copyparty subprocess manager (disabled - using production copyparty)
+      # ElixiPath.CopypartyManager,
       # Start the Endpoint (http/https)
       ElixiPathWeb.Endpoint
     ]

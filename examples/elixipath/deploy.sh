@@ -23,6 +23,9 @@ cp ../../../../elixihub.json ./
 cp ../../../../roles.json ./
 cp ../../../../mcp.json ./
 
+# Copy post-deploy scripts
+cp -r ../../../../scripts ./
+
 # Create the deployment package
 echo "Creating deployment package: ${PACKAGE_NAME}"
 cd ..

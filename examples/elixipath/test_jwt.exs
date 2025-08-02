@@ -1,87 +1,52 @@
-#!/usr/bin/env elixir
+# Test JWT round-trip: generate and verify with ElixiPath
+IO.puts("Testing JWT round-trip with ElixiPath:")
 
-# Test JWT verification for ElixiPath
-Mix.install([
-  {:jason, "~> 1.4"},
-  {:joken, "~> 2.6"}
-])
+# Test claims similar to what Guardian would generate
+claims = %{
+  "aud" => "elixihub",
+  "email" => "admin@example.com", 
+  "exp" => System.system_time(:second) + 3600,
+  "iat" => System.system_time(:second),
+  "iss" => "elixihub",
+  "jti" => "test-jti-123",
+  "nbf" => System.system_time(:second),
+  "sub" => "3",
+  "typ" => "access",
+  "username" => "admin@example.com"
+}
 
-# The JWT token from the error
-token = "eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJlbGl4aWh1YiIsImVtYWlsIjoiYWRtaW5AZXhhbXBsZS5jb20iLCJleHAiOjE3NTYzOTEzNDUsImlhdCI6MTc1Mzk3MjE0NSwiaXNzIjoiZWxpeGlodWIiLCJqdGkiOiIzYzNkNDVlNC1mYmRkLTQwMjItOTIzZi05ZTZlY2UyNzg1MzkiLCJuYmYiOjE3NTM5NzIxNDQsInN1YiI6IjMiLCJ0eXAiOiJhY2Nlc3MiLCJ1c2VybmFtZSI6ImFkbWluQGV4YW1wbGUuY29tIn0.HEuTShkbcMnMzyYX-orBZgYKLaX6FNHIIEsZn2meBShPUoTP0qwkCPe1pIq7YUvn7mEnfGB3LYibqj_qkiHAjQ"
-
-# The shared secret from ElixiPath
-shared_secret = "dev_secret_key_32_chars_long_exactly_for_jwt_signing"
-
-IO.puts("=== JWT TOKEN DEBUG ===")
-IO.puts("Token: #{String.slice(token, 0, 50)}...")
-IO.puts("Secret: #{String.slice(shared_secret, 0, 10)}...")
-
-# Test 1: Manual decoding
-IO.puts("\n=== MANUAL DECODING ===")
-[header_b64, payload_b64, _signature_b64] = String.split(token, ".")
-
-add_padding = fn s ->
-  padding_needed = rem(4 - rem(String.length(s), 4), 4)
-  s <> String.duplicate("=", padding_needed)
-end
-
-header = Jason.decode!(Base.url_decode64!(add_padding.(header_b64)))
-payload = Jason.decode!(Base.url_decode64!(add_padding.(payload_b64)))
-
-IO.puts("Header: #{inspect(header)}")
-IO.puts("Payload: #{inspect(payload)}")
-
-# Test 2: Joken verification (like ElixiPath does)
-IO.puts("\n=== JOKEN VERIFICATION ===")
-signer = Joken.Signer.create("HS512", shared_secret)
-
-case Joken.verify(token, signer) do
-  {:ok, claims} ->
-    IO.puts("✅ Joken.verify SUCCESS")
-    IO.puts("Claims: #{inspect(claims)}")
+# Generate token
+IO.puts("1. Generating token...")
+case ElixiPath.Auth.JWTVerifier.generate_token(claims) do
+  {:ok, token} ->
+    IO.puts("✅ Token generated successfully")
+    IO.puts("Token: #{String.slice(token, 0, 50)}...")
+    
+    # Verify the token we just generated
+    IO.puts("\n2. Verifying generated token...")
+    case ElixiPath.Auth.JWTVerifier.verify(token) do
+      {:ok, verified_claims} ->
+        IO.puts("✅ Round-trip successful!")
+        IO.inspect(verified_claims, label: "Verified Claims")
+      {:error, reason} ->
+        IO.puts("❌ Round-trip failed!")
+        IO.inspect(reason, label: "Verification Error")
+    end
+    
   {:error, reason} ->
-    IO.puts("❌ Joken.verify FAILED")
-    IO.puts("Error: #{inspect(reason)}")
+    IO.puts("❌ Token generation failed!")
+    IO.inspect(reason, label: "Generation Error")
 end
 
-# Test 3: Check token expiry
-current_time = System.system_time(:second)
-IO.puts("\n=== TIME VALIDATION ===")
-IO.puts("Current time: #{current_time}")
-IO.puts("Token exp: #{payload["exp"]}")
-IO.puts("Token iat: #{payload["iat"]}")
-IO.puts("Token nbf: #{payload["nbf"]}")
+# Also test the original Guardian token
+IO.puts("\n3. Testing original Guardian token:")
+guardian_token = "eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJlbGl4aWh1YiIsImVtYWlsIjoiYWRtaW5AZXhhbXBsZS5jb20iLCJleHAiOjE3NTY0NzcxMTksImlhdCI6MTc1NDA1NzkxOSwiaXNzIjoiZWxpeGlodWIiLCJqdGkiOiJhZmQxMGU5Ni04M2FjLTQzOWQtOTM3Ny05NjQ5M2Y0MTUwZGIiLCJuYmYiOjE3NTQwNTc5MTgsInN1YiI6IjMiLCJ0eXAiOiJhY2Nlc3MiLCJ1c2VybmFtZSI6ImFkbWluQGV4YW1wbGUuY29tIn0.9KVWdC4xBAVLtDJE7HgHdlBq_H2NvUi5vJgDjBDg5_nqKiOy_EqgpkYRG_zbx3KiLU9gHo8_pTECgP4o_Zv8dQ"
 
-is_expired = payload["exp"] < current_time
-is_not_yet_valid = payload["nbf"] > current_time
-
-IO.puts("Expired? #{is_expired}")  
-IO.puts("Not yet valid? #{is_not_yet_valid}")
-
-if is_expired do
-  IO.puts("⚠️  TOKEN IS EXPIRED!")
-  expired_for = current_time - payload["exp"]
-  IO.puts("Expired #{expired_for} seconds ago")
-end
-
-# Test 4: Try with Joken config (like ElixiPath token_config)
-IO.puts("\n=== JOKEN WITH CONFIG ===")
-
-defmodule TestJWT do
-  use Joken.Config
-  
-  def token_config do
-    default_claims(skip: [:aud, :iss])
-    |> add_claim("aud", fn -> "elixihub" end, &(&1 == "elixihub"))
-    |> add_claim("iss", fn -> "elixihub" end, &(&1 == "elixihub"))
-  end
-end
-
-case Joken.verify_and_validate(TestJWT.token_config(), token, signer) do
+case ElixiPath.Auth.JWTVerifier.verify(guardian_token) do
   {:ok, claims} ->
-    IO.puts("✅ Joken.verify_and_validate SUCCESS")
-    IO.puts("Claims: #{inspect(claims)}")
+    IO.puts("✅ Guardian token verified!")
+    IO.inspect(claims, label: "Guardian Claims")
   {:error, reason} ->
-    IO.puts("❌ Joken.verify_and_validate FAILED")
-    IO.puts("Error: #{inspect(reason)}")
+    IO.puts("❌ Guardian token failed!")
+    IO.inspect(reason, label: "Guardian Error")
 end
