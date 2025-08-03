@@ -33,7 +33,7 @@ defmodule ElixiPathWeb.CopypartyController do
     user = conn.assigns[:current_user]
     
     full_path = "/" <> Enum.join(path, "/")
-    Logger.info("Copyparty proxy request for path: #{full_path} by user: #{user && user.email}")
+    Logger.debug("Copyparty proxy request for path: #{full_path} by user: #{user && user.email}")
     
     # Forward request to Copyparty
     copyparty_url = ElixiPath.CopypartyManager.get_copyparty_url()
@@ -42,10 +42,10 @@ defmodule ElixiPathWeb.CopypartyController do
     query_string = if conn.query_string != "", do: "?" <> conn.query_string, else: ""
     target_url = copyparty_url <> full_path <> query_string
     
-    # Use copyparty IdP header authentication
+    # Use copyparty IdP header authentication with browser-like headers
     headers = [
       {"X-Remote-User", user && user.email},
-      {"User-Agent", "Mozilla/5.0 (ElixiPath/1.0)"},
+      {"User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 ElixiPath/1.0"},
       {"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}
     ]
     
@@ -93,24 +93,6 @@ defmodule ElixiPathWeb.CopypartyController do
       {:error, reason} ->
         Logger.error("Copyparty proxy GET error: #{inspect(reason)}")
         send_resp(conn, 502, "Bad Gateway")
-    end
-  end
-  
-  defp rewrite_asset_paths(body, headers) do
-    # Check if this is HTML content
-    content_type = Enum.find_value(headers, fn 
-      {key, value} when key in ["Content-Type", "content-type"] -> value
-      _ -> nil
-    end)
-    
-    if content_type && String.contains?(content_type, "text/html") do
-      # Rewrite /.cpr/ paths to /ui/.cpr/
-      body
-      |> String.replace(~r/href="\/\.cpr\//, "href=\"/ui/.cpr/")
-      |> String.replace(~r/src="\/\.cpr\//, "src=\"/ui/.cpr/")
-      |> String.replace(~r/url\("\/\.cpr\//, "url(\"/ui/.cpr/")
-    else
-      body
     end
   end
   

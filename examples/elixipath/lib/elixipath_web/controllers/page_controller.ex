@@ -27,4 +27,5 @@ defmodule ElixiPathWeb.PageController do
       directories: directories
     })
   end
+
 end

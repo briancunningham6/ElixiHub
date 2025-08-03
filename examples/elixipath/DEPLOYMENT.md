@@ -65,13 +65,15 @@ end
 
 Copyparty is started with:
 ```bash
-python3 -m copyparty -i 127.0.0.1 -p 8080 --idp-h-usr "X-Remote-User" -v "$ELIXIPATH_DIR:/:rwda"
+python3 -m copyparty -i 127.0.0.1 -p 8080 --idp-h-usr "X-Remote-User" -v "$ELIXIPATH_DIR:/:rwda" -e2d --chmod-d 755
 ```
 
 This configuration:
 - Listens on localhost:8080
 - Uses `X-Remote-User` header for authentication
 - Maps the ElixiPath directory to root with read/write/delete/admin permissions
+- Enables database mode (`-e2d`) for improved UI functionality including directory creation
+- Sets directory permissions to 755 for proper access control
 
 ### Controller Logic
 
@@ -115,15 +117,26 @@ This checks:
    - Verify `X-Remote-User` header is being sent
    - Check copyparty logs in `logs/copyparty.log`
 
-2. **JWT Authentication Failed**
+2. **Directory Creation Fails ("could not create subfolder")**
+   - Ensure copyparty is started with `-e2d` flag for database mode
+   - Verify directory permissions with `--chmod-d 755`
+   - Check that User-Agent header resembles a real browser
+   - Ensure multipart form data is properly handled in POST requests
+
+3. **JWT Authentication Failed**
    - Verify ElixiHub SSO integration is configured
    - Check JWT secret configuration matches ElixiHub
    - Review authentication logs
 
-3. **Asset Loading Issues**
+4. **Asset Loading Issues**
    - Ensure HTML rewriting is working in `CopypartyController`
    - Check browser network tab for failed asset requests
    - Verify static asset routes
+
+5. **Plain Text Instead of HTML Interface**
+   - Verify User-Agent header includes browser identification
+   - Check that Accept headers include `text/html`
+   - Ensure copyparty isn't started with `--force-js` flag
 
 ### Log Locations
 

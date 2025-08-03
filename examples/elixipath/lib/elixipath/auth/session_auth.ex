@@ -9,11 +9,12 @@ defmodule ElixiPath.Auth.SessionAuth do
   def init(opts), do: opts
 
   def call(conn, _opts) do
-    Logger.debug("SessionAuth called for path: #{conn.request_path}")
-    
     # Check if this is an SSO callback with a token - authenticate and store it
-    case conn.params do
-      %{"sso_token" => token} ->
+    # Check both params and query_params since sso_token comes as query parameter
+    sso_token = conn.params["sso_token"] || conn.query_params["sso_token"]
+    
+    case sso_token do
+      token when is_binary(token) ->
         Logger.debug("SSO token detected, authenticating user")
         case ElixiPath.Auth.verify_token(token) do
           {:ok, user} ->
@@ -32,13 +33,14 @@ defmodule ElixiPath.Auth.SessionAuth do
             handle_unauthenticated(conn)
         end
       
-      _ ->
+      nil ->
         case get_session(conn, "auth_token") do
           nil ->
-            Logger.debug("No auth token in session, checking if unauthenticated access allowed")
+            Logger.debug("No auth token in session for path: #{conn.request_path}")
             handle_unauthenticated(conn)
           
           token when is_binary(token) ->
+            Logger.debug("Found auth token, verifying...")
             case ElixiPath.Auth.verify_token(token) do
               {:ok, user} ->
                 Logger.debug("Session authentication successful for user: #{user.email}")
@@ -59,8 +61,6 @@ defmodule ElixiPath.Auth.SessionAuth do
   end
 
   defp handle_unauthenticated(conn) do
-    Logger.debug("Session auth checking path: #{conn.request_path}")
-    
     cond do
       conn.request_path == "/sso/authenticate" ->
         # Allow SSO authentication endpoint
@@ -72,13 +72,16 @@ defmodule ElixiPath.Auth.SessionAuth do
         conn
       
       String.starts_with?(conn.request_path, "/ui") ->
-        # TEMPORARY: Allow UI access with a test user for debugging
-        Logger.debug("Temporarily allowing UI access with test user")
-        test_user = %{email: "admin@example.com", id: 3}
-        assign(conn, :current_user, test_user)
+        # Redirect UI requests to ElixiHub for authentication
+        elixihub_auth_url = "http://localhost:4005/sso/auth?app_id=ElixiPath&return_to=#{encode_redirect_uri(conn)}"
+        
+        conn
+        |> fetch_flash()
+        |> put_flash(:info, "Please log in to continue")
+        |> redirect(external: elixihub_auth_url)
+        |> halt()
       
       true ->
-        Logger.debug("Redirecting unauthenticated request: #{conn.request_path}")
         # Redirect to ElixiHub for authentication
         elixihub_auth_url = "http://localhost:4005/sso/auth?app_id=ElixiPath&return_to=#{encode_redirect_uri(conn)}"
         

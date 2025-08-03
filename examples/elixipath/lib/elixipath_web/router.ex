@@ -18,7 +18,9 @@ defmodule ElixiPathWeb.Router do
 
   pipeline :copyparty_proxy do
     plug :accepts, ["html", "json"]
-    # No session handling at all for copyparty
+    plug :fetch_session
+    plug ElixiPath.Auth.SessionAuth
+    # Skip CSRF protection for copyparty since it handles its own security
   end
 
   pipeline :dev_only do
@@ -60,7 +62,7 @@ defmodule ElixiPathWeb.Router do
 
   # Copyparty UI proxy - with proper authentication
   scope "/ui", ElixiPathWeb do
-    pipe_through :browser
+    pipe_through :copyparty_proxy
     
     get "/*path", CopypartyController, :proxy
     post "/*path", CopypartyController, :proxy

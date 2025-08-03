@@ -60,7 +60,7 @@ if [ -f "copyparty.pid" ]; then
 fi
 
 echo "Starting copyparty for ElixiPath with authentication..."
-python3 -m copyparty -i 127.0.0.1 -p 8080 --idp-h-usr "X-Remote-User" -v "$ELIXIPATH_DIR:/:rwda" > "$DEPLOY_DIR/logs/copyparty.log" 2>&1 &
+python3 -m copyparty -i 127.0.0.1 -p 8080 --idp-h-usr "X-Remote-User" -v "$ELIXIPATH_DIR:/:rwda" -e2d --chmod-d 755 > "$DEPLOY_DIR/logs/copyparty.log" 2>&1 &
 COPYPARTY_PID=\$!
 
 echo "Copyparty started with PID: \$COPYPARTY_PID"

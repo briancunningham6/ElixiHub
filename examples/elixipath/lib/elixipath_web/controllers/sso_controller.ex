@@ -13,7 +13,7 @@ defmodule ElixiPathWeb.SSOController do
     Logger.info("SSO authenticate called with token")
     handle_token_authentication(conn, token, params)
   end
-
+  
   def authenticate(conn, _params) do
     Logger.warning("SSO authenticate called without token")
     
@@ -77,7 +77,7 @@ defmodule ElixiPathWeb.SSOController do
       
       conn
       |> put_flash(:info, "Development login successful")
-      |> redirect(to: "/dev/home")
+      |> redirect(to: "/ui/users/admin@example.com/")
     else
       send_resp(conn, 404, "Not Found")
     end
